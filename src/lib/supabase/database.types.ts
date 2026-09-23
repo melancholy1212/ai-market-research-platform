@@ -21,6 +21,8 @@ export type ResearchStatus =
   | "completed"
   | "failed";
 
+export type EventLevel = "info" | "warning" | "error";
+
 export type Database = {
   public: {
     Tables: {
@@ -33,6 +35,7 @@ export type Database = {
           status: ResearchStatus;
           error_message: string | null;
           created_at: string;
+          updated_at: string;
           completed_at: string | null;
         };
         Insert: {
@@ -43,6 +46,7 @@ export type Database = {
           status?: ResearchStatus;
           error_message?: string | null;
           created_at?: string;
+          updated_at?: string;
           completed_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["researches"]["Insert"]>;
@@ -219,6 +223,53 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      research_events: {
+        Row: {
+          id: number;
+          research_id: string;
+          stage: string;
+          level: EventLevel;
+          message: string;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          research_id: string;
+          stage: string;
+          level?: EventLevel;
+          message: string;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["research_events"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "research_events_research_id_fkey";
+            columns: ["research_id"];
+            isOneToOne: false;
+            referencedRelation: "researches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      provider_cache: {
+        Row: {
+          provider: string;
+          cache_key: string;
+          response: Json;
+          fetched_at: string;
+          expires_at: string;
+        };
+        Insert: {
+          provider: string;
+          cache_key: string;
+          response: Json;
+          fetched_at?: string;
+          expires_at: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["provider_cache"]["Insert"]>;
+        Relationships: [];
       };
     };
     Views: { [_ in never]: never };
