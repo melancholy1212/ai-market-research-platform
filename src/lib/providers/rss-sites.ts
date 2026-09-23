@@ -33,3 +33,16 @@ export const KNOWN_OUTLETS: ReadonlyMap<string, string> = new Map([
   ["tech.eu", "Tech.eu"],
   ["sifted.eu", "Sifted"],
 ]);
+
+// Home region of outlets whose coverage is regional; an article from Inc42 is
+// about India even when its headline does not say so. Values are geo place
+// names (countries or regions).
+export const OUTLET_REGIONS: ReadonlyMap<string, string> = new Map([
+  ["inc42.com", "india"],
+  ["startupdaily.net", "australia"],
+  ["techcabal.com", "africa"],
+  ["eu-startups.com", "europe"],
+  ["tech.eu", "europe"],
+  ["sifted.eu", "europe"],
+  ["yourstory.com", "india"],
+]);
