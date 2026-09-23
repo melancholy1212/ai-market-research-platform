@@ -156,7 +156,9 @@ analysis is saved. A company name alone is never treated as an identity.
 3. **Merging.** Extracted companies that resolve to the same Wikidata item or
    domain are merged ("Cred" and "CRED"), with their citations combined.
 4. **Websites**, in order of trust: a domain from the sources, the Wikidata
-   website of a resolved company, then a DuckDuckGo search. A search result
+   website of a resolved company, then a web search: DuckDuckGo, or Tavily
+   when DuckDuckGo is blocking (it blocks Vercel's datacenter IPs on the first
+   request, so in production this is effectively Tavily, 1 credit per lookup). A search result
    counts only if its domain matches the company name (`cred.club` for CRED,
    `xflowpay.com` for Xflow; `credit-suisse.com` is not "Cred"), and
    aggregators like LinkedIn or Crunchbase never count.
@@ -165,8 +167,9 @@ analysis is saved. A company name alone is never treated as an identity.
 it served a bot check after about three requests), so: it is used only for
 companies with no website from the sources or Wikidata; stored answers,
 including "nothing found", are cached for three weeks and read before any
-live lookup; live lookups are capped at 3 per research (most-cited companies
-first), serialized and spaced 5 seconds apart; and the first block page trips
+live lookup; live lookups (DuckDuckGo and Tavily combined) are capped at 3 per research
+(most-cited companies first); DuckDuckGo requests are serialized and spaced
+5 seconds apart; and the first block page trips
 a circuit breaker stored in the database that pauses lookups for 30 minutes
 across all runs, scoped per environment so a blocked development machine does
 not pause production.

@@ -1,10 +1,12 @@
 import "server-only";
 
+import { ProviderError } from "@/lib/http";
 import type { Analysis } from "@/lib/pipeline/analysis";
 
 import { cachedCompanyWebsite, findCompanyWebsite, isCoolingDown, SearchBlockedError } from "./ddg";
 import { registrableDomain } from "./domain";
 import { resolveCompany, type Resolution } from "./resolve";
+import { cachedTavilyWebsite, findWebsiteWithTavily, tavilyWebsiteConfigured } from "./tavily-website";
 import { getEntities, getLabels, searchOrganizations } from "./wikidata";
 
 type ExtractedCompany = Analysis["companies"][number];
@@ -33,11 +35,14 @@ export type ResolutionStats = {
   merged: number;
   websites: Record<WebsiteSource, number>;
   searchLookups: number;
+  // Live lookups per provider; DuckDuckGo first, Tavily when it is blocked.
+  searchLookupsBy: { ddg: number; tavily: number };
   searchBlocked: boolean;
   wikidataErrors: number;
 };
 
-// Lookups against DuckDuckGo per research; the rest of the budget is caching.
+// Live website lookups per research (DuckDuckGo and Tavily combined); the
+// rest of the work is served from cache.
 const MAX_SEARCH_LOOKUPS = 3;
 const WIKIDATA_CONCURRENCY = 3;
 
@@ -63,6 +68,7 @@ export async function resolveCompanies(companies: ExtractedCompany[], context: s
     merged: 0,
     websites: { sources: 0, wikidata: 0, search: 0 },
     searchLookups: 0,
+    searchLookupsBy: { ddg: 0, tavily: 0 },
     searchBlocked: false,
     wikidataErrors: 0,
   };
@@ -111,9 +117,10 @@ export async function resolveCompanies(companies: ExtractedCompany[], context: s
     };
   });
 
-  // 2. Websites still missing. Stored answers first (free, and they must
-  //    not use up the live budget), then a few live DuckDuckGo lookups for
-  //    the most-cited remaining companies.
+  // 2. Websites still missing. Stored answers from either search provider
+  //    first (free, and they must not use up the live budget), then a few
+  //    live lookups for the most-cited remaining companies: DuckDuckGo, or
+  //    Tavily once DuckDuckGo is blocking.
   const hint = (c: ResolvedCompany) => `${c.country ?? ""} company`;
   const setWebsite = (c: ResolvedCompany, domain: string | null) => {
     if (domain) {
@@ -125,23 +132,48 @@ export async function resolveCompanies(companies: ExtractedCompany[], context: s
   const uncached: ResolvedCompany[] = [];
   await Promise.all(
     missing.map(async (c) => {
-      const cached = await cachedCompanyWebsite(c.name, hint(c)).catch(() => undefined);
-      if (cached === undefined) uncached.push(c);
-      else setWebsite(c, cached);
+      const [ddg, tavily] = await Promise.all([
+        cachedCompanyWebsite(c.name, hint(c)).catch(() => undefined),
+        cachedTavilyWebsite(c.name, hint(c)).catch(() => undefined),
+      ]);
+      if (ddg === undefined && tavily === undefined) uncached.push(c);
+      else setWebsite(c, ddg ?? tavily ?? null);
     }),
   );
   uncached.sort((a, b) => b.sourceIds.length - a.sourceIds.length || resolved.indexOf(a) - resolved.indexOf(b));
 
   if (uncached.length && (await isCoolingDown().catch(() => false))) stats.searchBlocked = true;
+  let tavilyAvailable = tavilyWebsiteConfigured();
   for (const company of uncached) {
-    if (stats.searchBlocked || stats.searchLookups >= MAX_SEARCH_LOOKUPS) break;
+    if (stats.searchLookups >= MAX_SEARCH_LOOKUPS) break;
+    if (stats.searchBlocked && !tavilyAvailable) break;
     try {
-      const { domain, fromCache } = await findCompanyWebsite(company.name, hint(company));
-      if (!fromCache) stats.searchLookups++;
+      if (!stats.searchBlocked) {
+        const { domain, fromCache } = await findCompanyWebsite(company.name, hint(company));
+        if (!fromCache) {
+          stats.searchLookups++;
+          stats.searchLookupsBy.ddg++;
+        }
+        setWebsite(company, domain);
+        continue;
+      }
+      const { domain, fromCache } = await findWebsiteWithTavily(company.name, hint(company));
+      if (!fromCache) {
+        stats.searchLookups++;
+        stats.searchLookupsBy.tavily++;
+      }
       setWebsite(company, domain);
     } catch (error) {
-      if (error instanceof SearchBlockedError) stats.searchBlocked = true;
-      else console.warn(`website search failed for ${company.name}`, error);
+      if (error instanceof SearchBlockedError) {
+        stats.searchBlocked = true;
+        // Retry this company with Tavily on the next pass of the loop.
+        if (tavilyAvailable) uncached.splice(uncached.indexOf(company) + 1, 0, company);
+      } else if (error instanceof ProviderError && error.provider === "tavily") {
+        tavilyAvailable = false;
+        console.warn(`Tavily website lookup unavailable (${error.kind})`);
+      } else {
+        console.warn(`website search failed for ${company.name}`, error);
+      }
     }
   }
 

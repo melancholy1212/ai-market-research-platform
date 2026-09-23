@@ -392,7 +392,13 @@ export async function runResearch(researchId: string): Promise<void> {
             ({ companies, stats: resolution } = await resolveCompanies(analysis.companies, `${research.query} ${research.focus ?? ""}`));
             await log("resolving", describeResolution(resolution, companies.length), "info", resolution);
             if (resolution.searchBlocked) {
-              await log("resolving", "Web search for company websites is paused after hitting its rate limit; some websites may be missing.", "warning");
+              await log(
+                "resolving",
+                resolution.searchLookupsBy.tavily > 0
+                  ? "DuckDuckGo is rate-limiting this server, so company websites were looked up with Tavily instead."
+                  : "Web search for company websites is paused after hitting its rate limit; some websites may be missing.",
+                resolution.searchLookupsBy.tavily > 0 ? "info" : "warning",
+              );
             }
             if (resolution.wikidataErrors) {
               await log("resolving", "Some Wikidata lookups failed; those companies stay unverified.", "warning");
