@@ -46,6 +46,23 @@ async function searchSite(
   return { candidates, fromCache };
 }
 
+// Short, safe-to-display reason for a site failure, e.g. "HTTP 403".
+function failureReason(error: unknown): string {
+  if (!(error instanceof ProviderError)) return "unexpected error";
+  switch (error.kind) {
+    case "timeout":
+      return "timed out";
+    case "network":
+      return "unreachable";
+    case "malformed":
+      return "not a readable feed";
+    case "rate_limited":
+      return "rate-limited";
+    default:
+      return error.status ? `HTTP ${error.status}` : error.kind;
+  }
+}
+
 // Free, keyless news search across a curated set of news sites. Individual
 // sites failing (blocked, down, changed) is expected and reported as a
 // warning; the search fails only if no site could be read.
@@ -61,7 +78,10 @@ export const rssSearch: SearchProvider = {
     if (!keywords) return { candidates: [], fromCache: false };
 
     const settled = await Promise.allSettled(RSS_SITES.map((site) => searchSite(site, keywords)));
-    const failed = RSS_SITES.filter((_, i) => settled[i].status === "rejected");
+    const failed = RSS_SITES.flatMap((site, i) => {
+      const r = settled[i];
+      return r.status === "rejected" ? [{ site, reason: failureReason(r.reason) }] : [];
+    });
     if (failed.length === RSS_SITES.length) {
       throw new ProviderError("rss", "network", "no news site could be read");
     }
@@ -70,7 +90,11 @@ export const rssSearch: SearchProvider = {
       .flatMap((r) => (r.status === "fulfilled" ? r.value.candidates : []))
       .slice(0, request.maxResults);
     const warnings = failed.length
-      ? [`Could not read ${failed.length} of ${RSS_SITES.length} news sites (${failed.map((s) => s.name).join(", ")}).`]
+      ? [
+          `Could not read ${failed.length} of ${RSS_SITES.length} news sites (${failed
+            .map((f) => `${f.site.name}: ${f.reason}`)
+            .join("; ")}).`,
+        ]
       : [];
     const fromCache = settled.every((r) => r.status === "fulfilled" && r.value.fromCache);
     return { candidates, fromCache, warnings };
