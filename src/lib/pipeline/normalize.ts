@@ -1,4 +1,4 @@
-import { RSS_SITES } from "@/lib/providers/rss-sites";
+import { KNOWN_OUTLETS } from "@/lib/providers/rss-sites";
 import { decodeEntities } from "@/lib/text";
 import { displayHost } from "@/lib/url";
 
@@ -24,13 +24,9 @@ const squash = (s: string) =>
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "");
 
-// Known outlet names by host, so "inc42.com" (from web search) and "Inc42"
-// (from the news-site search) are the same publisher.
-const KNOWN_PUBLISHERS = new Map(RSS_SITES.map((site) => [displayHost(site.baseUrl)!, site.name]));
-
 export function canonicalPublisher(url: string, publisher: string | null): string | null {
   const host = displayHost(url);
-  if (host && KNOWN_PUBLISHERS.has(host)) return KNOWN_PUBLISHERS.get(host)!;
+  if (host && KNOWN_OUTLETS.has(host)) return KNOWN_OUTLETS.get(host)!;
   if (publisher && !/^[\w.-]+\.[a-z]{2,}$/i.test(publisher)) return publisher.trim();
   return host;
 }

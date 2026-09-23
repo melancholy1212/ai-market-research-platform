@@ -68,6 +68,8 @@ describe("canonicalPublisher", () => {
   it("maps known outlet hosts to one name", () => {
     expect(canonicalPublisher("https://inc42.com/buzz/x", "inc42.com")).toBe("Inc42");
     expect(canonicalPublisher("https://inc42.com/buzz/x", "Inc42")).toBe("Inc42");
+    // Not searched directly, but still a known outlet.
+    expect(canonicalPublisher("https://www.eu-startups.com/2026/09/x", "eu-startups.com")).toBe("EU-Startups");
   });
   it("keeps real publisher names and falls back to the host", () => {
     expect(canonicalPublisher("https://news.example/x", "Example News")).toBe("Example News");
