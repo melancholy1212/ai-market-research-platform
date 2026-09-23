@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { getSupabaseEnv } from "@/lib/env";
 import type { Database } from "./database.types";
+import { createRetryingFetch } from "./retrying-fetch";
 
 export type DbClient = SupabaseClient<Database>;
 
@@ -18,6 +19,7 @@ export function getSupabase(): DbClient {
     const { url, serviceRoleKey } = getSupabaseEnv();
     client = createClient<Database>(url, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: createRetryingFetch() },
     });
   }
   return client;
