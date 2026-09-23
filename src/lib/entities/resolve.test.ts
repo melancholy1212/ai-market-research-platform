@@ -70,6 +70,13 @@ describe("resolveCompany", () => {
     expect(r).toEqual({ status: "unresolved", reason: "not enough evidence" });
   });
 
+  it("keeps the country that matched when Wikidata lists several", () => {
+    const binational = { ...byId.get("Q27907429")!, countryIds: ["Q30", "Q183"] };
+    const r = resolveCompany(company({ name: "Darktrace", country: "Germany" }), [binational], new Map([...countries, ["Q183", "Germany"]]), "AI startups in Germany");
+    expect(r.status).toBe("resolved");
+    if (r.status === "resolved") expect(r.match.matchedCountry).toBe("Germany");
+  });
+
   it("reports ambiguity when two candidates are equally good", () => {
     const twin = { ...byId.get("Q106455641")!, id: "Q999", websites: [] };
     const r = resolveCompany(company({ name: "CRED", country: "India" }), [byId.get("Q106455641")!, twin], countries, INDIA_FINTECH);

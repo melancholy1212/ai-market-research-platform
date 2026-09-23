@@ -104,6 +104,10 @@ export type CandidateMatch = {
   entity: WikidataEntity;
   score: number;
   signals: string[];
+  // The candidate's country that agreed with the sources, if any. Wikidata
+  // can list several (a German-American company has both); this is the one
+  // to display.
+  matchedCountry: string | null;
 };
 
 export type Resolution =
@@ -130,6 +134,7 @@ export function scoreCandidate(
 
   let score = 1;
   const signals = ["organization"];
+  let matchedCountry: string | null = null;
 
   // Country: a known mismatch is disqualifying (XFlow in Denmark is not
   // Xflow in India).
@@ -142,6 +147,10 @@ export function scoreCandidate(
     if (entityCountries.includes(wanted) || inDescription) {
       score += 2;
       signals.push("country matches");
+      // Prefer Wikidata's spelling; if only the description matched
+      // ("German company"), the sources' country is the confirmed one.
+      matchedCountry =
+        entity.countryIds.map((id) => countryLabels.get(id)).find((c) => c && normCountry(c) === wanted) ?? company.country;
     } else if (entityCountries.length > 0) {
       return { rejected: `country differs (${entityCountries.join(", ")})` };
     }
@@ -175,7 +184,7 @@ export function scoreCandidate(
     signals.push("description fits the research");
   }
 
-  return { entity, score, signals };
+  return { entity, score, signals, matchedCountry };
 }
 
 const ACCEPT_SCORE = 3;

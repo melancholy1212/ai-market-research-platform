@@ -87,7 +87,8 @@ export async function resolveCompanies(companies: ExtractedCompany[], context: s
     const r = resolveCompany(company, candidates, countryLabels, context);
 
     const match = r.status === "resolved" ? r.match : null;
-    const wikidataCountry = match?.entity.countryIds.map((id) => countryLabels.get(id)).find(Boolean) ?? null;
+    const wikidataCountry =
+      match?.matchedCountry ?? match?.entity.countryIds.map((id) => countryLabels.get(id)).find(Boolean) ?? null;
     const wikidataDomain = match?.entity.websites.map(registrableDomain).find(Boolean) ?? null;
     const domain = company.domain ?? wikidataDomain;
 
