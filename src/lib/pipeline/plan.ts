@@ -14,7 +14,7 @@ export function buildSearchPlan(research: { query: string; focus: string | null 
   const tasks: SearchTask[] = [
     { providerId: "tavily", request: { text: research.query, type: "web", maxResults: 10 } },
     { providerId: "tavily", request: { text: research.query, type: "news", maxResults: 10 } },
-    { providerId: "gdelt", request: { text: research.query, type: "news", maxResults: 25 } },
+    { providerId: "rss", request: { text: research.query, type: "news", maxResults: 40 } },
   ];
   if (research.focus) {
     tasks.push({

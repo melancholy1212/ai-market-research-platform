@@ -25,6 +25,9 @@ export type SourceCandidate = {
 export type SearchResult = {
   candidates: SourceCandidate[];
   fromCache: boolean;
+  // Partial failures worth showing in the run log (e.g. one of several
+  // feeds was unreachable) that did not stop the search as a whole.
+  warnings?: string[];
 };
 
 export interface SearchProvider {

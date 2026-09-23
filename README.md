@@ -47,11 +47,21 @@ log. The page refreshes itself while the run is active.
 | Provider | Used for | Notes |
 | --- | --- | --- |
 | Tavily | Web and news search | Needs `TAVILY_API_KEY`; 1 credit per search |
-| GDELT DOC 2.0 | Global news | Free, no key; limited to about one request every 5s per IP |
+| News site search | News from 7 curated outlets | Free, no key; WordPress search feeds (`/?s=<keywords>&feed=rss2`) |
+
+The news-site search queries each outlet's WordPress search feed, which
+returns full-text search results as RSS, often reaching back months. The
+outlets (TechCrunch, Crunchbase News, EU-Startups, Inc42, Startup Daily,
+TechCabal, SecurityWeek) were each checked by hand to return real,
+topic-filtered results. Individual outlets failing is reported as a warning
+in the run log; the search fails only if none can be read. GDELT was tried
+first and dropped: it rate-limits shared IPs (including Vercel's) and
+returned no results for typical queries.
 
 **Caching**: raw provider responses are cached in Postgres
-(`provider_cache`) keyed by a hash of the request, for 24h (web) or 3-6h
-(news). Raw responses are cached rather than parsed results, so parser fixes
+(`provider_cache`) keyed by a hash of the request, for 24h (web) or 6h
+(news). Feeds are validated before caching, so a blocked or HTML response
+is never cached. Raw responses are cached rather than parsed results, so parser fixes
 apply to cached data immediately.
 
 ## Tech stack
@@ -71,7 +81,7 @@ src/
     env.ts              server env handling
     research.ts         research queries
     pipeline/           run orchestration, search plan, candidate merge
-    providers/          Tavily and GDELT clients, provider cache
+    providers/          Tavily and news-site (RSS) search, provider cache
     http.ts             timeouts, retries, typed provider errors
     url.ts              URL normalization
     supabase/           server-only Supabase client + database types
@@ -130,7 +140,7 @@ npm run build
 | --- | --- | --- |
 | `SUPABASE_URL` | yes | Project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | Server-only secret key. Never prefix with `NEXT_PUBLIC_` |
-| `TAVILY_API_KEY` | no | Web/news search. Without it, runs use GDELT only |
+| `TAVILY_API_KEY` | no | Web/news search. Without it, runs use the news-site search only |
 | `RESEARCH_HOURLY_LIMIT` | no | Research runs allowed per rolling hour, app-wide. Default 20 |
 | `SUPABASE_DB_PASSWORD` | no | Used only by the Supabase CLI for `db push`; the app never reads it |
 

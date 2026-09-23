@@ -1,7 +1,7 @@
 import "server-only";
 
 import { ProviderError } from "@/lib/http";
-import { gdelt } from "@/lib/providers/gdelt";
+import { rssSearch } from "@/lib/providers/rss";
 import { tavily } from "@/lib/providers/tavily";
 import type { SearchProvider } from "@/lib/providers/types";
 import type { EventLevel, Json, ResearchStatus } from "@/lib/supabase/database.types";
@@ -10,7 +10,7 @@ import { getSupabase } from "@/lib/supabase/server";
 import { mergeCandidates, type MergeInput } from "./merge";
 import { buildSearchPlan, type SearchTask } from "./plan";
 
-const PROVIDERS: Record<string, SearchProvider> = { [tavily.id]: tavily, [gdelt.id]: gdelt };
+const PROVIDERS: Record<string, SearchProvider> = { [tavily.id]: tavily, [rssSearch.id]: rssSearch };
 
 // A failure whose message is written for the end user.
 class RunError extends Error {}
@@ -103,7 +103,8 @@ export async function runResearch(researchId: string): Promise<void> {
         const label = taskLabel(provider, task);
         const meta = { provider: provider.id, type: task.request.type, query: task.request.text };
         try {
-          const { candidates, fromCache } = await provider.search(task.request);
+          const { candidates, fromCache, warnings = [] } = await provider.search(task.request);
+          for (const warning of warnings) await log("collecting", warning, "warning", meta);
           await log(
             "collecting",
             `${label}: ${candidates.length} result${candidates.length === 1 ? "" : "s"}${fromCache ? " (cached)" : ""}.`,

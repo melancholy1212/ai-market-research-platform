@@ -17,12 +17,12 @@ const candidate = (over: Partial<SourceCandidate>): SourceCandidate => ({
 });
 
 describe("buildSearchPlan", () => {
-  it("runs web, news and GDELT searches for the question", () => {
+  it("runs web, news and news-site searches for the question", () => {
     const plan = buildSearchPlan({ query: "Fintech in Brazil", focus: null });
     expect(plan.map((t) => `${t.providerId}:${t.request.type}`)).toEqual([
       "tavily:web",
       "tavily:news",
-      "gdelt:news",
+      "rss:news",
     ]);
     expect(plan.every((t) => t.request.text === "Fintech in Brazil")).toBe(true);
   });
@@ -38,7 +38,7 @@ describe("mergeCandidates", () => {
   it("folds URLs that normalize to the same canonical URL", () => {
     const { sources, stats } = mergeCandidates([
       { provider: "tavily", query: "q", candidates: [candidate({ url: "https://www.example.com/a/?utm_source=x", title: "A" })] },
-      { provider: "gdelt", query: "q", candidates: [candidate({ url: "http://example.com/a", type: "news", publishedAt: "2026-09-01T00:00:00.000Z" })] },
+      { provider: "rss", query: "q", candidates: [candidate({ url: "http://example.com/a", type: "news", publishedAt: "2026-09-01T00:00:00.000Z" })] },
     ]);
     expect(sources).toHaveLength(1);
     expect(stats).toEqual({ received: 2, invalidUrls: 0, duplicates: 1 });
@@ -49,7 +49,7 @@ describe("mergeCandidates", () => {
       publishedAt: "2026-09-01T00:00:00.000Z",
       type: "news",
     });
-    expect(sources[0].foundBy.map((d) => d.provider)).toEqual(["tavily", "gdelt"]);
+    expect(sources[0].foundBy.map((d) => d.provider)).toEqual(["tavily", "rss"]);
   });
 
   it("keeps the first non-null value for each field", () => {
