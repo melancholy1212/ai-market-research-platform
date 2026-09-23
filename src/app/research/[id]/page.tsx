@@ -13,7 +13,7 @@ import type { CitationTarget } from "@/components/citations";
 import { EmptyState } from "@/components/empty-state";
 import { ProgressLog } from "@/components/progress-log";
 import { SetupNotice } from "@/components/setup-notice";
-import { groupSourcesByStory, sourceAnchor, SourceList, type Story } from "@/components/source-list";
+import { groupSourcesByStory, SetAsideSources, sourceAnchor, SourceList, type Story } from "@/components/source-list";
 import { StatusBadge } from "@/components/status-badge";
 import { MissingEnvError } from "@/lib/env";
 import { formatDateTime } from "@/lib/format";
@@ -36,7 +36,7 @@ const STATUS_NOTES: Partial<Record<ResearchStatus, string>> = {
   pending: "Queued. The run starts in a moment.",
   planning: "Planning searches for the question.",
   collecting: "Searching news and web sources.",
-  processing: "Cleaning up sources and grouping duplicate stories.",
+  processing: "Cleaning up sources, grouping duplicate stories and filtering off-topic ones.",
   analyzing: "Analyzing the sources with AI. This usually takes under a minute.",
   resolving: "Verifying companies against Wikidata and finding their websites.",
 };
@@ -86,7 +86,14 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
   const terminal = research.status === "completed" || research.status === "failed";
   const running = !terminal && !stale;
   const note = running ? STATUS_NOTES[research.status] : undefined;
-  const stories = groupSourcesByStory(sources);
+  const allStories = groupSourcesByStory(sources);
+  // Unscored sources (older research) count as relevant.
+  const stories = allStories.filter((s) => s.primary.is_relevant !== false);
+  const setAside = allStories.filter((s) => s.primary.is_relevant === false);
+  const relevantSourceCount = stories.reduce((n, s) => n + 1 + s.alsoReported.length, 0);
+  const aiOffTopic = new Set(
+    ((analysis?.report?.metadata as { ai_off_topic_source_ids?: unknown } | null)?.ai_off_topic_source_ids as string[] | undefined) ?? [],
+  );
   const citations = citationIndex(stories);
   const analysisFailed = events.some((e) => e.stage === "analyzing" && e.level === "warning");
 
@@ -166,15 +173,15 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
         <section>
           <h2 className="text-lg font-semibold tracking-tight">
             Sources{" "}
-            {sources.length > 0 && (
+            {relevantSourceCount > 0 && (
               <span className="font-normal text-muted">
-                ({sources.length}
-                {stories.length < sources.length && ` sources, ${stories.length} stories`})
+                ({relevantSourceCount}
+                {stories.length < relevantSourceCount && ` sources, ${stories.length} stories`})
               </span>
             )}
           </h2>
           <div className="mt-3">
-            {sources.length > 0 ? (
+            {stories.length > 0 ? (
               <SourceList stories={stories} />
             ) : (
               <EmptyState
@@ -186,6 +193,7 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
                 }
               />
             )}
+            <SetAsideSources stories={setAside} aiOffTopic={aiOffTopic} />
           </div>
         </section>
       </div>

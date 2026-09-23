@@ -134,6 +134,19 @@ describe("parseAnalysis", () => {
     expect(analysis.keyFindings[0].sourceIds).toEqual(["uuid-1", "uuid-2", "uuid-3"]);
   });
 
+  it("returns off-topic sources, ignoring invented ids and sources it cites", () => {
+    const { analysis } = parse({
+      ...base,
+      overview: { summary: "S.", key_findings: [{ text: "x", source_ids: ["S1"] }] },
+      off_topic_source_ids: ["S3", "S1", "S77", "s3"],
+    });
+    expect(analysis.offTopicSourceIds).toEqual(["uuid-3"]);
+  });
+
+  it("treats a missing off-topic list as empty", () => {
+    expect(parse(base).analysis.offTopicSourceIds).toEqual([]);
+  });
+
   it("rejects output without a summary or that is not JSON", () => {
     expect(() => parse({ ...base, overview: { summary: "", key_findings: [] } })).toThrow(/summary/);
     expect(() => parseAnalysis("{not json", aliases, sources, NOW)).toThrow(/JSON/);

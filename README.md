@@ -96,6 +96,38 @@ All deterministic; no LLM involved.
    Italian unicorn Exein rides the physical AI wave") are not caught; that is
    left to the AI stages.
 
+## Relevance filtering
+
+Keyword search returns plenty of sources that only *mention* a query word
+(the news sites' full-text search is the main offender: Australian funding
+round-ups and African tech newsletters for "AI startups in Germany"). Before
+anything reaches the AI, every source is scored deterministically:
+
+- **Topic and place coverage**: the question is split into topic terms
+  (short acronyms like AI kept; generic words like "startups" or
+  "companies" ignored) and places. A term found in the title counts fully,
+  in the snippet 0.6, in the URL path 0.4. Places expand to demonyms, major
+  cities and, for regions, member countries ("Munich-based" counts for
+  Germany, "French" for Europe); short forms like US/EU only count in
+  capitals, so "contact us" is not the United States. Compound topics match
+  their parts ("cyber security" for cybersecurity).
+- **Outlet region**: regional outlets count as evidence for their region
+  (an Inc42 article is about India even when the headline doesn't say so).
+- **Hard limits**: a question about a place needs sources about that place,
+  so a strong topic match elsewhere ("China's humanoid robot industry" for
+  Japan) fails; job listings never pass. Old articles are penalized; being
+  found by several searches helps.
+- **Stories, not sources**: a story is as relevant as its best report, and
+  if fewer than 15 stories pass, the best partial matches are kept so a
+  narrow question is not filtered to nothing.
+
+Off-topic stories are **kept and shown** in a collapsed "Set aside" section
+with their reasons; they are just not sent to the AI. The AI then gives a
+second opinion in the same call it already makes (`off_topic_source_ids`),
+never overriding sources it cites. On a real run of "AI startups in Germany",
+34 of 56 stories were set aside (28 not about Germany, 5 not about AI, 1 job
+listing), which halved the prompt from ~5.5k to ~2.5k tokens.
+
 ## AI analysis and source attribution
 
 After sources are stored, the run makes **one** AI call over the story
@@ -285,7 +317,7 @@ npm run build
 3. ~~Source discovery and ingestion~~
 4. ~~Normalization and deduplication~~
 5. ~~Entity resolution~~
-6. Relevance filtering
+6. ~~Relevance filtering~~
 7. ~~AI analysis~~
 8. ~~Source-backed report generation~~
 9. Dashboard polish

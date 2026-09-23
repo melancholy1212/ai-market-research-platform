@@ -83,3 +83,39 @@ export function SourceList({ stories }: { stories: Story[] }) {
     </ul>
   );
 }
+
+function setAsideReason(source: Source, aiOffTopic: ReadonlySet<string>): string {
+  if (aiOffTopic.has(source.id)) return "judged off-topic by the AI";
+  const reasons = (source.metadata as { relevance?: { reasons?: unknown } } | null)?.relevance?.reasons;
+  const list = Array.isArray(reasons) ? reasons.filter((r): r is string => typeof r === "string" && !r.startsWith("found by")) : [];
+  return list.length ? list.join("; ") : "weak match for the question";
+}
+
+// Stories set aside as off-topic: still listed, so nothing disappears
+// silently, but outside the numbered evidence list.
+export function SetAsideSources({ stories, aiOffTopic }: { stories: Story[]; aiOffTopic: ReadonlySet<string> }) {
+  if (stories.length === 0) return null;
+  return (
+    <details className="mt-4 rounded-lg border border-border bg-surface px-4 py-3">
+      <summary className="cursor-pointer text-sm font-medium select-none">
+        Set aside as off-topic <span className="font-normal text-muted">({stories.length})</span>
+      </summary>
+      <p className="mt-2 text-xs text-muted">
+        Collected by the searches but not about this question, so not used in the analysis.
+      </p>
+      <ul className="mt-3 space-y-2">
+        {stories.map(({ primary }) => (
+          <li key={primary.id} className="text-sm">
+            <a href={primary.url} target="_blank" rel="noopener noreferrer" className="text-muted hover:text-accent hover:underline">
+              {primary.title ?? primary.canonical_url}
+            </a>
+            <span className="ml-2 text-xs text-muted">
+              {primary.publisher && `${primary.publisher} · `}
+              {setAsideReason(primary, aiOffTopic)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}

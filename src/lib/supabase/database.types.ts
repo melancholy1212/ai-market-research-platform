@@ -66,6 +66,8 @@ export type Database = {
           extracted_text: string | null;
           metadata: Json;
           duplicate_of: string | null;
+          relevance_score: number | null;
+          is_relevant: boolean | null;
           created_at: string;
         };
         Insert: {
@@ -80,6 +82,8 @@ export type Database = {
           extracted_text?: string | null;
           metadata?: Json;
           duplicate_of?: string | null;
+          relevance_score?: number | null;
+          is_relevant?: boolean | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["sources"]["Insert"]>;

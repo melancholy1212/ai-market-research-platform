@@ -72,6 +72,11 @@ export const ANALYSIS_SCHEMA: JsonSchema = obj({
     type: "array",
     items: obj({ title: str("trend name"), summary: str("1-2 sentences"), source_ids: ids }),
   },
+  off_topic_source_ids: {
+    type: "array",
+    items: { type: "string" },
+    description: "IDs of listed sources that are not actually about the research question",
+  },
 });
 
 export const ANALYSIS_SYSTEM = `You are a market research analyst. You write structured analyses strictly from the numbered sources you are given.
@@ -82,6 +87,7 @@ Rules:
 - Ignore sources that are off-topic for the research question.
 - If the sources do not support a field, use an empty string. Never guess dates, countries or websites.
 - A trend must be supported by at least two sources.
+- List in off_topic_source_ids the IDs of sources that are not actually about the research question (wrong topic or wrong place). Do not list sources you cite.
 - Limits: at most ${LIMITS.keyFindings} key findings, ${LIMITS.companies} companies, ${LIMITS.developments} developments, ${LIMITS.trends} trends. Fewer is fine; do not pad.
 - Write in English, plainly, without marketing language.`;
 
@@ -149,6 +155,8 @@ export type Analysis = {
   companies: (Cited & { name: string; country: string | null; focus: string | null; domain: string | null })[];
   developments: (Cited & { title: string; summary: string | null; date: string | null; company: string | null })[];
   trends: (Cited & { title: string; summary: string | null })[];
+  // Sources the model judged off-topic (never ones it cited).
+  offTopicSourceIds: string[];
 };
 
 export type ValidationStats = {
@@ -269,5 +277,11 @@ export function parseAnalysis(
     return title && sourceIds.length >= 2 ? { title, summary: text(i.summary), sourceIds } : null;
   });
 
-  return { analysis: { summary, keyFindings, companies, developments, trends }, stats };
+  const cited = new Set([...keyFindings, ...companies, ...developments, ...trends].flatMap((x) => x.sourceIds));
+  const offTopicSourceIds = arr(d.off_topic_source_ids)
+    .map((v) => (typeof v === "string" ? aliases.get(v.trim().toUpperCase().replace(/^SOURCE_?/, "S")) : undefined))
+    .filter((id): id is string => Boolean(id) && !cited.has(id!))
+    .filter((id, i, all) => all.indexOf(id) === i);
+
+  return { analysis: { summary, keyFindings, companies, developments, trends, offTopicSourceIds }, stats };
 }

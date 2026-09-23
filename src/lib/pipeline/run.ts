@@ -23,6 +23,7 @@ import {
 import { groupStories, titleTokens } from "./dedup";
 import { mergeCandidates, type MergeInput } from "./merge";
 import { normalizeSources, type NormalizedSource } from "./normalize";
+import { judgeStories, relevanceContext, summarizeReasons, type Relevance } from "./relevance";
 import { buildSearchPlan, type SearchTask } from "./plan";
 
 const PROVIDERS: Record<string, SearchProvider> = { [tavily.id]: tavily, [rssSearch.id]: rssSearch };
@@ -253,7 +254,25 @@ export async function runResearch(researchId: string): Promise<void> {
     const ordered = [...normalized.sources].sort(primaryFirst);
     const groups = groupStories(ordered, titleTokens(`${research.query} ${research.focus ?? ""}`));
 
-    const row = (s: NormalizedSource, extra: { duplicate_of?: string; dedup?: Json } = {}) => ({
+    // Relevance: score every source; a story is kept or set aside as a whole.
+    const judged = judgeStories(
+      groups.map((g) =>
+        [g.primary, ...g.duplicates.map((d) => d.source)].map((s) => ({
+          title: s.title,
+          snippet: s.snippet,
+          url: s.url,
+          publishedAt: s.publishedAt,
+          foundByCount: s.foundBy.length,
+        })),
+      ),
+      relevanceContext(research),
+    );
+
+    const row = (
+      s: NormalizedSource,
+      relevance: { own: Relevance; storyRelevant: boolean; promoted: boolean },
+      extra: { duplicate_of?: string; dedup?: Json } = {},
+    ) => ({
       research_id: researchId,
       url: s.url,
       canonical_url: s.canonicalUrl,
@@ -263,8 +282,14 @@ export async function runResearch(researchId: string): Promise<void> {
       source_type: s.type,
       extracted_text: s.snippet,
       duplicate_of: extra.duplicate_of ?? null,
+      relevance_score: relevance.own.score,
+      is_relevant: relevance.storyRelevant,
       metadata: {
         found_by: s.foundBy,
+        relevance: {
+          reasons: relevance.own.reasons,
+          ...(relevance.promoted ? { promoted: true } : {}),
+        },
         ...(s.titleTruncated ? { title_truncated: true } : {}),
         ...(extra.dedup ? { dedup: extra.dedup } : {}),
       },
@@ -276,7 +301,9 @@ export async function runResearch(researchId: string): Promise<void> {
       const { data: inserted, error: insertError } = await supabase
         .from("sources")
         .upsert(
-          groups.map((g) => row(g.primary)),
+          groups.map((g, i) =>
+            row(g.primary, { own: judged[i].members[0], storyRelevant: judged[i].relevant, promoted: judged[i].promoted }),
+          ),
           { onConflict: "research_id,canonical_url", ignoreDuplicates: true },
         )
         .select("id, canonical_url");
@@ -284,11 +311,15 @@ export async function runResearch(researchId: string): Promise<void> {
       for (const r of inserted) primaryIds.set(r.canonical_url, r.id);
     }
 
-    const duplicateRows = groups.flatMap((g) => {
+    const duplicateRows = groups.flatMap((g, i) => {
       const primaryId = primaryIds.get(g.primary.canonicalUrl);
       return primaryId
-        ? g.duplicates.map((d) =>
-            row(d.source, { duplicate_of: primaryId, dedup: { reason: d.match.reason, similarity: d.match.similarity } }),
+        ? g.duplicates.map((d, j) =>
+            row(
+              d.source,
+              { own: judged[i].members[j + 1], storyRelevant: judged[i].relevant, promoted: judged[i].promoted },
+              { duplicate_of: primaryId, dedup: { reason: d.match.reason, similarity: d.match.similarity } },
+            ),
           )
         : [];
     });
@@ -324,9 +355,28 @@ export async function runResearch(researchId: string): Promise<void> {
       );
     }
 
-    // Analyzing: one AI call over the stored story primaries.
+    const relevantCount = judged.filter((j) => j.relevant).length;
+    if (groups.length > 0) {
+      const setAside = groups.length - relevantCount;
+      const promoted = judged.filter((j) => j.promoted).length;
+      await log(
+        "processing",
+        `Relevance: ${relevantCount} of ${plural(groups.length, "story", "stories")} are on topic` +
+          (setAside ? `; set aside ${setAside} (${summarizeReasons(judged)})` : "") +
+          (promoted ? `. ${plural(promoted, "weaker match")} kept so the question stays covered` : "") +
+          ".",
+        "info",
+        { relevant: relevantCount, setAside, promoted },
+      );
+    }
+
+    // Analyzing: one AI call over the relevant story primaries, best first,
+    // so a small prompt budget gets the most on-topic sources.
     const analysisSources: AnalysisSource[] = groups
-      .filter((g) => primaryIds.has(g.primary.canonicalUrl))
+      .map((g, i) => ({ g, j: judged[i], i }))
+      .filter(({ g, j }) => j.relevant && primaryIds.has(g.primary.canonicalUrl))
+      .sort((a, b) => b.j.score - a.j.score || a.i - b.i)
+      .map(({ g }) => g)
       .slice(0, LIMITS.sources)
       .map((g) => ({
         id: primaryIds.get(g.primary.canonicalUrl)!,
@@ -414,12 +464,33 @@ export async function runResearch(researchId: string): Promise<void> {
           sources_analyzed: sourcesAnalyzed,
           validation,
           resolution,
+          ai_off_topic_source_ids: analysis.offTopicSourceIds,
         };
         const { error: saveError } = await supabase
           .rpc("save_research_analysis", { p_research_id: researchId, p_analysis: analysisPayload(analysis, companies, metadata) })
           // The function refuses a second save, so retrying is safe.
           .setHeader(RETRY_SAFE_HEADER, "1");
         if (saveError) throw new Error(`saving analysis failed: ${saveError.message}`);
+
+        // The AI's second opinion on relevance: set aside the stories it
+        // judged off-topic (primaries and their duplicates). Best effort.
+        if (analysis.offTopicSourceIds.length > 0) {
+          const ids = analysis.offTopicSourceIds.join(",");
+          const { error: flagError } = await supabase
+            .from("sources")
+            .update({ is_relevant: false })
+            .eq("research_id", researchId)
+            .or(`id.in.(${ids}),duplicate_of.in.(${ids})`);
+          if (flagError) console.warn(`runResearch ${researchId}: could not flag off-topic sources`, flagError.message);
+          else {
+            await log(
+              "analyzing",
+              `The AI set aside ${plural(analysis.offTopicSourceIds.length, "more source")} as off-topic.`,
+              "info",
+              { off_topic_source_ids: analysis.offTopicSourceIds },
+            );
+          }
+        }
       } catch (error) {
         // Analysis failing must not throw away the collected sources: the
         // research still completes, and the log says why there is no report.
