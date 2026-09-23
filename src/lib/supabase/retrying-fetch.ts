@@ -6,6 +6,9 @@
 // where a rare duplicate beats a missing entry).
 
 const RETRY_DELAYS_MS = [300, 1000];
+// Per attempt. Without it, a connection that hangs (seen on a flaky network)
+// stalls the whole research run for minutes.
+const ATTEMPT_TIMEOUT_MS = 20_000;
 export const RETRY_SAFE_HEADER = "x-retry-safe";
 
 function isRepeatable(init: RequestInit | undefined): boolean {
@@ -27,12 +30,17 @@ export function createRetryingFetch(baseFetch: typeof fetch = fetch): typeof fet
       headers.delete(RETRY_SAFE_HEADER);
       init = { ...init, headers };
     }
-    if (!repeatable) return baseFetch(input, init);
+    const withTimeout = (): RequestInit => ({
+      ...init,
+      signal: init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(ATTEMPT_TIMEOUT_MS)]) : AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
+    });
+    if (!repeatable) return baseFetch(input, withTimeout());
     for (let attempt = 0; ; attempt++) {
       try {
-        return await baseFetch(input, init);
+        return await baseFetch(input, withTimeout());
       } catch (error) {
         // An aborted request was cancelled on purpose; don't retry it.
+        // A timed-out one is a network failure and is retried.
         const aborted = error instanceof DOMException && error.name === "AbortError";
         if (aborted || attempt >= RETRY_DELAYS_MS.length) throw error;
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));

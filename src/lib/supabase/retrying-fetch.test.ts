@@ -49,3 +49,17 @@ describe("createRetryingFetch: opt-in", () => {
     expect(sentHeaders.has(RETRY_SAFE_HEADER)).toBe(false);
   });
 });
+
+describe("createRetryingFetch: timeouts", () => {
+  it("gives every attempt a timeout signal", async () => {
+    const base = vi.fn().mockResolvedValue(ok());
+    await createRetryingFetch(base)("https://db.test");
+    expect(base.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("retries an attempt that timed out", async () => {
+    const base = vi.fn().mockRejectedValueOnce(new DOMException("timed out", "TimeoutError")).mockResolvedValueOnce(ok());
+    await createRetryingFetch(base)("https://db.test");
+    expect(base).toHaveBeenCalledTimes(2);
+  });
+});
