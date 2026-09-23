@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { decodeEntities, htmlToText, parseRssFeed } from "./rss-parse";
+import { decodeEntities } from "@/lib/text";
+
+import { htmlToText, parseRssFeed } from "./rss-parse";
 
 const feed = (items: string) =>
   `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Site</title>${items}</channel></rss>`;
