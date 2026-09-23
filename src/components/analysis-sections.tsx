@@ -50,7 +50,12 @@ export function OverviewSection({ analysis, citations }: Props) {
   );
 }
 
-const WEBSITE_SOURCE_LABEL = { sources: "from the sources", wikidata: "from Wikidata", search: "from web search" } as const;
+const WEBSITE_SOURCE_LABEL = {
+  sources: "from the sources",
+  wikidata: "from Wikidata",
+  clearbit: "from Clearbit (name match)",
+  search: "from web search (name match)",
+} as const;
 
 function IdentityBadge({ entity }: { entity: Entity }) {
   const r = entityResolution(entity);

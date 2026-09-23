@@ -144,7 +144,7 @@ export type EntityResolution = {
   confidence: number | null;
   signals: string[];
   reason: string | null;
-  websiteSource: "sources" | "wikidata" | "search" | null;
+  websiteSource: "sources" | "wikidata" | "clearbit" | "search" | null;
 };
 
 // Resolution details stored on the entity; null for entities saved before

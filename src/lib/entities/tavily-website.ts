@@ -4,11 +4,11 @@ import { ProviderError, requestJson } from "@/lib/http";
 import { readCache, withCache } from "@/lib/providers/cache";
 import type { Json } from "@/lib/supabase/database.types";
 
-import { pickOfficialDomain } from "./ddg-parse";
+import { pickOfficialDomain } from "./website";
 
-// Website lookup through Tavily, used when DuckDuckGo is blocking (it blocks
-// Vercel's datacenter IPs on the first request). Costs 1 credit per uncached
-// lookup, so callers keep the same small per-research budget.
+// Website lookup through Tavily web search: the last step, for companies
+// that neither the sources, Wikidata nor Clearbit could give a website for.
+// Costs 1 credit per uncached lookup, so callers cap it per research.
 
 const ENDPOINT = "https://api.tavily.com/search";
 const TTL_SECONDS = 21 * 24 * 60 * 60;

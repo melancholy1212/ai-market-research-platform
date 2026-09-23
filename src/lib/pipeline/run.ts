@@ -113,11 +113,12 @@ function unresolvedCompanies(analysis: Analysis): ResolvedCompany[] {
 function describeResolution(stats: ResolutionStats, total: number): string {
   const parts = [`${stats.resolved} of ${total} verified against Wikidata`];
   if (stats.merged) parts.push(`${plural(stats.merged, "duplicate")} merged`);
-  const websites = stats.websites.sources + stats.websites.wikidata + stats.websites.search;
+  const websites = stats.websites.sources + stats.websites.wikidata + stats.websites.clearbit + stats.websites.search;
   if (websites) {
     const from = [
       stats.websites.sources && `${stats.websites.sources} from sources`,
       stats.websites.wikidata && `${stats.websites.wikidata} from Wikidata`,
+      stats.websites.clearbit && `${stats.websites.clearbit} from Clearbit`,
       stats.websites.search && `${stats.websites.search} from web search`,
     ].filter(Boolean);
     parts.push(`${plural(websites, "website")} found (${from.join(", ")})`);
@@ -391,14 +392,8 @@ export async function runResearch(researchId: string): Promise<void> {
           try {
             ({ companies, stats: resolution } = await resolveCompanies(analysis.companies, `${research.query} ${research.focus ?? ""}`));
             await log("resolving", describeResolution(resolution, companies.length), "info", resolution);
-            if (resolution.searchBlocked) {
-              await log(
-                "resolving",
-                resolution.searchLookupsBy.tavily > 0
-                  ? "DuckDuckGo is rate-limiting this server, so company websites were looked up with Tavily instead."
-                  : "Web search for company websites is paused after hitting its rate limit; some websites may be missing.",
-                resolution.searchLookupsBy.tavily > 0 ? "info" : "warning",
-              );
+            if (resolution.searchUnavailable) {
+              await log("resolving", "Web search for company websites was unavailable; some websites may be missing.", "warning");
             }
             if (resolution.wikidataErrors) {
               await log("resolving", "Some Wikidata lookups failed; those companies stay unverified.", "warning");

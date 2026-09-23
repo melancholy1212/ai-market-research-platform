@@ -46,12 +46,12 @@ log. The page refreshes itself while the run is active.
 | Provider | Used for | Notes |
 | --- | --- | --- |
 | Tavily | Web and news search | Needs `TAVILY_API_KEY`; 1 credit per search |
-| News site search | News from 7 curated outlets | Free, no key; WordPress search feeds (`/?s=<keywords>&feed=rss2`) |
+| News site search | News from 6 curated outlets | Free, no key; WordPress search feeds (`/?s=<keywords>&feed=rss2`) |
 
 The news-site search queries each outlet's WordPress search feed, which
 returns full-text search results as RSS, often reaching back months. The
-outlets (TechCrunch, Crunchbase News, EU-Startups, Inc42, Startup Daily,
-TechCabal, SecurityWeek) were each checked by hand to return real,
+outlets (TechCrunch, Crunchbase News, Inc42, Startup Daily, TechCabal,
+SecurityWeek) were each checked by hand to return real,
 topic-filtered results. Individual outlets failing is reported as a warning
 in the run log; the search fails only if none can be read. GDELT was tried
 first and dropped: it rate-limits shared IPs (including Vercel's) and
@@ -155,24 +155,31 @@ analysis is saved. A company name alone is never treated as an identity.
    company rather than a same-named US one.
 3. **Merging.** Extracted companies that resolve to the same Wikidata item or
    domain are merged ("Cred" and "CRED"), with their citations combined.
-4. **Websites**, in order of trust: a domain from the sources, the Wikidata
-   website of a resolved company, then a web search: DuckDuckGo, or Tavily
-   when DuckDuckGo is blocking (it blocks Vercel's datacenter IPs on the first
-   request, so in production this is effectively Tavily, 1 credit per lookup). A search result
-   counts only if its domain matches the company name (`cred.club` for CRED,
-   `xflowpay.com` for Xflow; `credit-suisse.com` is not "Cred"), and
-   aggregators like LinkedIn or Crunchbase never count.
+4. **Websites**, in order of trust, each step only for companies the
+   previous ones left without one:
+   1. a domain that appears in the collected sources;
+   2. the official website of a resolved Wikidata item;
+   3. **Clearbit Autocomplete** (free, no key): the suggestion's name must
+      equal the company name, its domain must match that name, and a domain
+      in *another* country's ccTLD is dropped (`clinomic.in` is not a German
+      company's site, `perfios.com.br` not an Indian one's); if several
+      domains remain it is treated as ambiguous and skipped. Clearbit covers
+      startups far better than Wikidata but is unmaintained with no SLA, so it
+      is never the only step;
+   4. **Tavily web search**, at most 3 live lookups per research, most-cited
+      companies first: the first result whose domain matches the company
+      name, skipping aggregators like LinkedIn or Crunchbase.
 
-**Keeping DuckDuckGo requests low.** DuckDuckGo blocks fast (during development
-it served a bot check after about three requests), so: it is used only for
-companies with no website from the sources or Wikidata; stored answers,
-including "nothing found", are cached for three weeks and read before any
-live lookup; live lookups (DuckDuckGo and Tavily combined) are capped at 3 per research
-(most-cited companies first); DuckDuckGo requests are serialized and spaced
-5 seconds apart; and the first block page trips
-a circuit breaker stored in the database that pauses lookups for 30 minutes
-across all runs, scoped per environment so a blocked development machine does
-not pause production.
+   Clearbit and search websites are name matches, not verified identities, and
+   the UI says so. On two real research runs this raised website coverage from
+   4 of 15 to 10 of 15 (Germany) and 4 of 14 to 10 of 14 (India).
+
+**Keeping external requests low.** All lookups are cached and shared across
+research runs (Wikidata and raw Clearbit/Tavily responses for 30/21 days),
+cached answers are read before any live request, and only Tavily (the one
+lookup that costs credits) has a per-research cap. DuckDuckGo was tried first
+and dropped: it served a bot check after about three requests from a
+residential IP and blocked Vercel's datacenter IPs on the very first one.
 
 The companies table shows a **Wikidata** badge (with the matching evidence)
 for resolved companies and **Unverified**/**Ambiguous** otherwise, and where
@@ -203,7 +210,7 @@ src/
     pipeline/           run orchestration, search plan, merge, normalize, dedup
     providers/          Tavily and news-site (RSS) search, provider cache
     ai/                 Gemini and Groq clients, fallback chain
-    entities/           Wikidata + DuckDuckGo entity resolution
+    entities/           Wikidata resolution, Clearbit/Tavily website discovery
     http.ts             timeouts, retries, typed provider errors
     url.ts              URL normalization
     supabase/           server-only Supabase client + database types
