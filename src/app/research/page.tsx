@@ -7,7 +7,7 @@ import { SetupNotice } from "@/components/setup-notice";
 import { StatusBadge } from "@/components/status-badge";
 import { MissingEnvError } from "@/lib/env";
 import { formatDateTime } from "@/lib/format";
-import { listResearches, type Research } from "@/lib/research";
+import { isStale, listResearches, type Research } from "@/lib/research";
 
 export const metadata: Metadata = { title: "Research history" };
 
@@ -61,7 +61,7 @@ export default async function ResearchHistoryPage() {
                     <span className="hidden text-xs text-muted sm:inline">
                       {formatDateTime(research.created_at)}
                     </span>
-                    <StatusBadge status={research.status} />
+                    <StatusBadge status={isStale(research) ? "failed" : research.status} />
                   </div>
                 </Link>
               </li>

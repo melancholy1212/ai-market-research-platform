@@ -6,6 +6,18 @@ import type { Tables } from "@/lib/supabase/database.types";
 import { getSupabase } from "@/lib/supabase/server";
 
 export type Research = Tables<"researches">;
+export type Source = Tables<"sources">;
+export type ResearchEvent = Tables<"research_events">;
+
+// A run can't outlive the function's 300s limit, so a non-terminal research
+// untouched for longer than this was interrupted (crash, deploy, timeout).
+const STALE_AFTER_MS = 6 * 60 * 1000;
+
+export function isStale(research: Research, now = Date.now()): boolean {
+  if (research.status === "completed" || research.status === "failed") return false;
+  if (research.status === "pending") return now - Date.parse(research.created_at) > STALE_AFTER_MS;
+  return now - Date.parse(research.updated_at) > STALE_AFTER_MS;
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -60,4 +72,25 @@ export async function createResearch(input: ResearchInput): Promise<CreateResear
     .single();
   if (error) throw new Error(`Failed to create research: ${error.message}`);
   return { ok: true, id: data.id };
+}
+
+export async function listSources(researchId: string): Promise<Source[]> {
+  const { data, error } = await getSupabase()
+    .from("sources")
+    .select("*")
+    .eq("research_id", researchId)
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`Failed to load sources: ${error.message}`);
+  return data;
+}
+
+export async function listEvents(researchId: string): Promise<ResearchEvent[]> {
+  const { data, error } = await getSupabase()
+    .from("research_events")
+    .select("*")
+    .eq("research_id", researchId)
+    .order("id", { ascending: true });
+  if (error) throw new Error(`Failed to load research progress: ${error.message}`);
+  return data;
 }

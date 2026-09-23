@@ -1,5 +1,10 @@
 import { ResearchForm } from "@/components/research-form";
 
+// The research run executes in the background of the server action that
+// this page's form calls, so it gets this route's time budget. 300s is the
+// Vercel Hobby maximum; a run normally finishes in well under a minute.
+export const maxDuration = 300;
+
 const PIPELINE = [
   { title: "Plan", body: "Interpret the question and break it into research subtopics." },
   { title: "Collect", body: "Query search, news and public data sources for each subtopic." },

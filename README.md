@@ -4,10 +4,10 @@ Turns a natural-language market research question into a structured,
 source-backed research report: companies, recent developments, and emerging
 trends, with every finding traceable to the sources that support it.
 
-> **Status: early development.** The application foundation (routes, database
-> schema, Supabase connection) is in place. The research pipeline is being
-> built milestone by milestone. Nothing in the app is mocked: sections with no
-> real data show empty states.
+> **Status: early development.** Research runs collect and store real sources
+> from web and news search. Entity resolution and AI analysis are being built
+> milestone by milestone. Nothing in the app is mocked: sections with no real
+> data show empty states.
 
 ## Planned pipeline
 
@@ -20,6 +20,39 @@ question → plan → collect sources → normalize → deduplicate
 The LLM is used only where language reasoning is needed (planning,
 extraction, classification, synthesis). URL normalization, deduplication,
 validation and storage are deterministic code.
+
+## How a research run works today
+
+Submitting a question creates a `pending` research and redirects to its page.
+The run then executes in the background of that request (Next.js `after()`,
+within Vercel's 300s function limit) and reports progress as it goes:
+
+1. **Plan**: a fixed set of searches (web, news, and a focused web search
+   when a focus is given).
+2. **Collect**: searches run concurrently against each provider. Timeouts,
+   rate limits, exhausted quotas and malformed responses are caught per
+   search, logged in plain language, and the run continues with whatever
+   succeeded. It fails only if every source fails.
+3. **Process**: URLs are normalized (scheme, `www`, tracking parameters,
+   trailing slashes, fragments) and exact duplicates are merged, keeping a
+   record of every search that found each source.
+4. **Store**: sources are upserted with a unique constraint on
+   `(research_id, canonical_url)`, so duplicates cannot slip in.
+
+Each stage writes to `research_events`, which the page shows as a live run
+log. The page refreshes itself while the run is active.
+
+**Providers** sit behind a small `SearchProvider` interface:
+
+| Provider | Used for | Notes |
+| --- | --- | --- |
+| Tavily | Web and news search | Needs `TAVILY_API_KEY`; 1 credit per search |
+| GDELT DOC 2.0 | Global news | Free, no key; limited to about one request every 5s per IP |
+
+**Caching**: raw provider responses are cached in Postgres
+(`provider_cache`) keyed by a hash of the request, for 24h (web) or 3-6h
+(news). Raw responses are cached rather than parsed results, so parser fixes
+apply to cached data immediately.
 
 ## Tech stack
 
@@ -37,6 +70,10 @@ src/
   lib/
     env.ts              server env handling
     research.ts         research queries
+    pipeline/           run orchestration, search plan, candidate merge
+    providers/          Tavily and GDELT clients, provider cache
+    http.ts             timeouts, retries, typed provider errors
+    url.ts              URL normalization
     supabase/           server-only Supabase client + database types
 supabase/migrations/    SQL schema
 ```
@@ -47,6 +84,8 @@ supabase/migrations/    SQL schema
 | --- | --- |
 | `researches` | One row per research question, with its processing status |
 | `sources` | Collected documents; unique per research on normalized URL |
+| `research_events` | Run log: what each stage did, including degraded sources |
+| `provider_cache` | Cached raw responses from external providers |
 | `entities` | Resolved organizations; unique per research on domain, never on name alone |
 | `findings` | Developments, trends and facts, optionally tied to an entity |
 | `finding_sources` | Evidence links: which sources support which finding |
@@ -77,6 +116,7 @@ Then:
 
 ```bash
 npm run dev          # http://localhost:3000
+npm test
 npm run typecheck
 npm run lint
 npm run build
@@ -90,14 +130,15 @@ npm run build
 | --- | --- | --- |
 | `SUPABASE_URL` | yes | Project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | Server-only secret key. Never prefix with `NEXT_PUBLIC_` |
+| `TAVILY_API_KEY` | no | Web/news search. Without it, runs use GDELT only |
 | `RESEARCH_HOURLY_LIMIT` | no | Research runs allowed per rolling hour, app-wide. Default 20 |
 | `SUPABASE_DB_PASSWORD` | no | Used only by the Supabase CLI for `db push`; the app never reads it |
 
 ## Roadmap
 
 1. ~~Application foundation~~
-2. Research creation and persistence
-3. Source discovery and ingestion
+2. ~~Research creation and persistence~~
+3. ~~Source discovery and ingestion~~
 4. Normalization and deduplication
 5. Entity resolution
 6. Relevance filtering

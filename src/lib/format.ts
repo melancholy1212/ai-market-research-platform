@@ -9,3 +9,9 @@ const dateTime = new Intl.DateTimeFormat("en-GB", {
 export function formatDateTime(iso: string): string {
   return `${dateTime.format(new Date(iso))} UTC`;
 }
+
+const dateOnly = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" });
+
+export function formatDate(iso: string): string {
+  return dateOnly.format(new Date(iso));
+}

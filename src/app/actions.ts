@@ -1,8 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 
 import { MissingEnvError } from "@/lib/env";
+import { runResearch } from "@/lib/pipeline/run";
 import { createResearch } from "@/lib/research";
 import { parseResearchInput, type ResearchInputErrors } from "@/lib/research-input";
 
@@ -44,6 +46,10 @@ export async function createResearchAction(
         : "Could not start the research. Please try again.";
     return { message, values };
   }
+
+  // Run the pipeline after the response is sent, within this function's
+  // maxDuration (set on the page that renders the form).
+  after(() => runResearch(id));
 
   // Outside the try: redirect() works by throwing, and must not be caught.
   redirect(`/research/${id}`);
