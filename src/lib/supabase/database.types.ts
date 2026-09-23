@@ -213,6 +213,7 @@ export type Database = {
           research_id: string;
           overview: string;
           key_takeaways: Json;
+          metadata: Json;
           created_at: string;
         };
         Insert: {
@@ -220,6 +221,7 @@ export type Database = {
           research_id: string;
           overview: string;
           key_takeaways?: Json;
+          metadata?: Json;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["reports"]["Insert"]>;
@@ -282,7 +284,12 @@ export type Database = {
       };
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      save_research_analysis: {
+        Args: { p_research_id: string; p_analysis: Json };
+        Returns: string;
+      };
+    };
     Enums: {
       research_status: ResearchStatus;
     };

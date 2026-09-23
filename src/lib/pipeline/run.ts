@@ -1,5 +1,7 @@
 import "server-only";
 
+import { AllProvidersFailedError, generateWithFallback } from "@/lib/ai/fallback";
+import { aiProviders } from "@/lib/ai/providers";
 import { ProviderError } from "@/lib/http";
 import { rssSearch } from "@/lib/providers/rss";
 import { tavily } from "@/lib/providers/tavily";
@@ -8,6 +10,15 @@ import type { EventLevel, Json, ResearchStatus } from "@/lib/supabase/database.t
 import { RETRY_SAFE_HEADER } from "@/lib/supabase/retrying-fetch";
 import { getSupabase } from "@/lib/supabase/server";
 
+import {
+  ANALYSIS_SCHEMA,
+  ANALYSIS_SYSTEM,
+  buildAnalysisPrompt,
+  LIMITS,
+  parseAnalysis,
+  type Analysis,
+  type AnalysisSource,
+} from "./analysis";
 import { groupStories, titleTokens } from "./dedup";
 import { mergeCandidates, type MergeInput } from "./merge";
 import { normalizeSources, type NormalizedSource } from "./normalize";
@@ -27,6 +38,36 @@ function primaryFirst(a: NormalizedSource, b: NormalizedSource): number {
 }
 
 const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
+
+const PROVIDER_NAMES: Record<string, string> = { gemini: "Gemini", groq: "Groq" };
+const providerName = (id: string) => PROVIDER_NAMES[id] ?? id;
+
+// Shapes a validated analysis into the payload save_research_analysis takes.
+function analysisPayload(analysis: Analysis, metadata: Json): Json {
+  const companyKeys = new Map(analysis.companies.map((c, i) => [c.name.toLowerCase(), `c${i}`]));
+  // The unique (research_id, domain) index allows one company per domain.
+  const seenDomains = new Set<string>();
+  return {
+    report: { overview: analysis.summary, metadata },
+    companies: analysis.companies.map((c, i) => {
+      const domain = c.domain && !seenDomains.has(c.domain) ? c.domain : null;
+      if (domain) seenDomains.add(domain);
+      return { key: `c${i}`, name: c.name, domain, country: c.country, description: c.focus, source_ids: c.sourceIds };
+    }),
+    findings: [
+      ...analysis.keyFindings.map((f) => ({ type: "key_finding", title: f.text, summary: null, occurred_at: null, company_key: null, source_ids: f.sourceIds })),
+      ...analysis.developments.map((f) => ({
+        type: "development",
+        title: f.title,
+        summary: f.summary,
+        occurred_at: f.date,
+        company_key: (f.company && companyKeys.get(f.company.toLowerCase())) ?? null,
+        source_ids: f.sourceIds,
+      })),
+      ...analysis.trends.map((f) => ({ type: "trend", title: f.title, summary: f.summary, occurred_at: null, company_key: null, source_ids: f.sourceIds })),
+    ],
+  };
+}
 
 // A failure whose message is written for the end user.
 class RunError extends Error {}
@@ -226,12 +267,97 @@ export async function runResearch(researchId: string): Promise<void> {
       );
     }
 
+    // Analyzing: one AI call over the stored story primaries.
+    const analysisSources: AnalysisSource[] = groups
+      .filter((g) => primaryIds.has(g.primary.canonicalUrl))
+      .slice(0, LIMITS.sources)
+      .map((g) => ({
+        id: primaryIds.get(g.primary.canonicalUrl)!,
+        title: g.primary.title,
+        url: g.primary.url,
+        publisher: g.primary.publisher,
+        publishedAt: g.primary.publishedAt,
+        snippet: g.primary.snippet,
+        alsoReportedBy: g.duplicates.length,
+      }));
+    const providers = aiProviders().filter((p) => p.isConfigured());
+
+    if (analysisSources.length === 0) {
+      await log("analyzing", "No sources to analyze.", "warning");
+    } else if (providers.length === 0) {
+      await log("analyzing", "No AI provider is configured on this deployment, so the sources were not analyzed.", "warning");
+    } else {
+      await setStatus("analyzing");
+      await log("analyzing", `Analyzing ${plural(analysisSources.length, "source")} with AI.`);
+      try {
+        let sourcesAnalyzed = 0;
+        const result = await generateWithFallback(providers, (provider) => {
+          const { prompt, aliases, included } = buildAnalysisPrompt(research, analysisSources, provider.maxInputTokens);
+          sourcesAnalyzed = included.length;
+          return {
+            request: { system: ANALYSIS_SYSTEM, prompt, schema: ANALYSIS_SCHEMA, schemaName: "research_analysis", maxOutputTokens: 8192 },
+            parse: (text: string) => parseAnalysis(text, aliases, included),
+          };
+        });
+        for (const attempt of result.failedAttempts) {
+          await log(
+            "analyzing",
+            `${providerName(attempt.provider)} (${attempt.model}) could not complete the analysis (${attempt.error}); trying the next option.`,
+            "warning",
+            attempt,
+          );
+        }
+        const { analysis, stats: validation } = result.value;
+        const metadata = {
+          provider: result.provider,
+          model: result.model,
+          input_tokens: result.inputTokens,
+          output_tokens: result.outputTokens,
+          sources_analyzed: sourcesAnalyzed,
+          validation,
+        };
+        const { error: saveError } = await supabase
+          .rpc("save_research_analysis", { p_research_id: researchId, p_analysis: analysisPayload(analysis, metadata) })
+          // The function refuses a second save, so retrying is safe.
+          .setHeader(RETRY_SAFE_HEADER, "1");
+        if (saveError) throw new Error(`saving analysis failed: ${saveError.message}`);
+
+        const dropped = validation.droppedItems + validation.droppedWebsites;
+        if (sourcesAnalyzed < analysisSources.length) {
+          await log(
+            "analyzing",
+            `${providerName(result.provider)}'s free-tier limits fit ${sourcesAnalyzed} of ${analysisSources.length} sources; the most informative were used.`,
+            "info",
+          );
+        }
+        await log(
+          "analyzing",
+          `Analysis by ${providerName(result.provider)} (${result.model}): ${plural(analysis.companies.length, "company", "companies")}, ` +
+            `${plural(analysis.developments.length, "development")}, ${plural(analysis.trends.length, "trend")}` +
+            (dropped ? `. Discarded ${plural(dropped, "unsupported claim")}.` : "."),
+          "info",
+          metadata,
+        );
+      } catch (error) {
+        // Analysis failing must not throw away the collected sources: the
+        // research still completes, and the log says why there is no report.
+        console.error(`runResearch ${researchId}: analysis failed`, error);
+        const message =
+          error instanceof AllProvidersFailedError
+            ? `AI analysis is unavailable right now (${error.attempts.map((a) => `${providerName(a.provider)}: ${a.error}`).join("; ")}).`
+            : "The AI analysis could not be saved.";
+        await log("analyzing", `${message} The sources below were still collected.`, "warning", {
+          attempts: error instanceof AllProvidersFailedError ? error.attempts : [],
+        });
+      }
+    }
+
     const { error: completeError } = await supabase
       .from("researches")
       .update({ status: "completed", completed_at: now(), updated_at: now() })
       .eq("id", researchId);
     if (completeError) throw new Error(`completing run failed: ${completeError.message}`);
-    await log("completed", "Source collection finished.");
+    await log("completed", "Research finished.");
   } catch (error) {
     console.error(`runResearch ${researchId} failed`, error);
     const message = error instanceof RunError ? error.message : "The research run failed unexpectedly.";
