@@ -69,7 +69,6 @@ Apply the schema by running
 editor, or with the Supabase CLI:
 
 ```bash
-npx supabase init     # first time only: creates supabase/config.toml
 npx supabase link --project-ref <your-project-ref>
 npx supabase db push
 ```
@@ -91,6 +90,7 @@ npm run build
 | --- | --- | --- |
 | `SUPABASE_URL` | yes | Project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | Server-only secret key. Never prefix with `NEXT_PUBLIC_` |
+| `SUPABASE_DB_PASSWORD` | no | Used only by the Supabase CLI for `db push`; the app never reads it |
 
 ## Roadmap
 
