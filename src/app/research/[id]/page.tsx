@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { MissingEnvError } from "@/lib/env";
 import { formatDateTime } from "@/lib/format";
 import { getResearch, type Research } from "@/lib/research";
+import type { ResearchStatus } from "@/lib/supabase/database.types";
 
 export const metadata: Metadata = { title: "Research" };
 
@@ -20,6 +21,17 @@ const SECTIONS = [
   { title: "Emerging trends", empty: "Patterns that recur across multiple sources." },
   { title: "Sources", empty: "Every source consulted, with publisher, date and a link to the original." },
 ];
+
+// What each non-terminal status means to the reader. Kept honest: until the
+// research engine exists, nothing moves a research out of "pending".
+const STATUS_NOTES: Partial<Record<ResearchStatus, string>> = {
+  pending:
+    "Queued. Automated processing is not enabled yet, so this research stays queued for now.",
+  planning: "Breaking the question into research subtopics.",
+  collecting: "Collecting sources.",
+  processing: "Normalizing, deduplicating and resolving entities.",
+  analyzing: "Analyzing findings and writing the report.",
+};
 
 export default async function ResearchDetailPage({ params }: PageProps<"/research/[id]">) {
   const { id } = await params;
@@ -46,6 +58,11 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
         </div>
         {research.focus && <p className="mt-1 text-muted">{research.focus}</p>}
         <p className="mt-2 text-xs text-muted">Created {formatDateTime(research.created_at)}</p>
+        {STATUS_NOTES[research.status] && (
+          <p className="mt-4 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-muted">
+            {STATUS_NOTES[research.status]}
+          </p>
+        )}
         {research.status === "failed" && research.error_message && (
           <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm">
             {research.error_message}

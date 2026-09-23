@@ -24,3 +24,12 @@ export function getSupabaseEnv() {
 
   return { url: url!, serviceRoleKey: serviceRoleKey! };
 }
+
+// Cap on research runs created per rolling hour across the whole app. The
+// public demo has no accounts, so this is what stops one visitor from
+// running up external API and LLM costs.
+export function getResearchHourlyLimit(): number {
+  const raw = process.env.RESEARCH_HOURLY_LIMIT;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 20;
+}
