@@ -1,0 +1,234 @@
+// Types for the Supabase schema in supabase/migrations.
+//
+// Hand-maintained for now, in the shape `supabase gen types typescript`
+// produces, so it can be replaced by the generated file without touching
+// call sites. Keep in sync with the migrations.
+
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
+
+export type ResearchStatus =
+  | "pending"
+  | "planning"
+  | "collecting"
+  | "processing"
+  | "analyzing"
+  | "completed"
+  | "failed";
+
+export type Database = {
+  public: {
+    Tables: {
+      researches: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          query: string;
+          focus: string | null;
+          status: ResearchStatus;
+          error_message: string | null;
+          created_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          query: string;
+          focus?: string | null;
+          status?: ResearchStatus;
+          error_message?: string | null;
+          created_at?: string;
+          completed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["researches"]["Insert"]>;
+        Relationships: [];
+      };
+      sources: {
+        Row: {
+          id: string;
+          research_id: string;
+          url: string;
+          canonical_url: string;
+          title: string | null;
+          publisher: string | null;
+          published_at: string | null;
+          source_type: string;
+          extracted_text: string | null;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          research_id: string;
+          url: string;
+          canonical_url: string;
+          title?: string | null;
+          publisher?: string | null;
+          published_at?: string | null;
+          source_type: string;
+          extracted_text?: string | null;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["sources"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "sources_research_id_fkey";
+            columns: ["research_id"];
+            isOneToOne: false;
+            referencedRelation: "researches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      entities: {
+        Row: {
+          id: string;
+          research_id: string;
+          name: string;
+          entity_type: string;
+          domain: string | null;
+          country: string | null;
+          description: string | null;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          research_id: string;
+          name: string;
+          entity_type?: string;
+          domain?: string | null;
+          country?: string | null;
+          description?: string | null;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["entities"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "entities_research_id_fkey";
+            columns: ["research_id"];
+            isOneToOne: false;
+            referencedRelation: "researches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      findings: {
+        Row: {
+          id: string;
+          research_id: string;
+          entity_id: string | null;
+          type: string;
+          title: string;
+          summary: string | null;
+          occurred_at: string | null;
+          confidence: number | null;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          research_id: string;
+          entity_id?: string | null;
+          type: string;
+          title: string;
+          summary?: string | null;
+          occurred_at?: string | null;
+          confidence?: number | null;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["findings"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "findings_research_id_fkey";
+            columns: ["research_id"];
+            isOneToOne: false;
+            referencedRelation: "researches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "findings_entity_id_fkey";
+            columns: ["entity_id"];
+            isOneToOne: false;
+            referencedRelation: "entities";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      finding_sources: {
+        Row: {
+          finding_id: string;
+          source_id: string;
+          excerpt: string | null;
+          created_at: string;
+        };
+        Insert: {
+          finding_id: string;
+          source_id: string;
+          excerpt?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["finding_sources"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "finding_sources_finding_id_fkey";
+            columns: ["finding_id"];
+            isOneToOne: false;
+            referencedRelation: "findings";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "finding_sources_source_id_fkey";
+            columns: ["source_id"];
+            isOneToOne: false;
+            referencedRelation: "sources";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      reports: {
+        Row: {
+          id: string;
+          research_id: string;
+          overview: string;
+          key_takeaways: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          research_id: string;
+          overview: string;
+          key_takeaways?: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["reports"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "reports_research_id_fkey";
+            columns: ["research_id"];
+            isOneToOne: true;
+            referencedRelation: "researches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+    };
+    Views: { [_ in never]: never };
+    Functions: { [_ in never]: never };
+    Enums: {
+      research_status: ResearchStatus;
+    };
+    CompositeTypes: { [_ in never]: never };
+  };
+};
+
+export type Tables<T extends keyof Database["public"]["Tables"]> =
+  Database["public"]["Tables"][T]["Row"];
