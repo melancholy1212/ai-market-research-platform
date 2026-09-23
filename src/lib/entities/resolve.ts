@@ -1,3 +1,5 @@
+import { DEMONYMS, normCountry } from "@/lib/geo";
+
 import { domainMatchesName, registrableDomain } from "./domain";
 
 // Deterministic identity resolution of a company mentioned in the sources
@@ -70,28 +72,6 @@ const ORG_CLASSES = new Set([
   "Q650241", "Q658255", "Q20074337", "Q167037", "Q2085381", "Q17127659",
 ]);
 const ORG_WORDS = /\b(company|startup|firm|provider|platform|bank|business|enterprise|fintech|manufacturer|developer|organi[sz]ation|corporation|conglomerate)\b/i;
-
-// Demonyms for countries this app commonly sees, so a description such as
-// "Indian financial services company" counts as country evidence.
-const DEMONYMS: Record<string, string[]> = {
-  india: ["indian"], "united kingdom": ["british", "uk", "english", "scottish"], "united states": ["american", "us", "u.s."],
-  germany: ["german"], france: ["french"], italy: ["italian"], spain: ["spanish"], netherlands: ["dutch"],
-  sweden: ["swedish"], denmark: ["danish"], norway: ["norwegian"], finland: ["finnish"], ireland: ["irish"],
-  israel: ["israeli"], switzerland: ["swiss"], austria: ["austrian"], belgium: ["belgian"], poland: ["polish"],
-  estonia: ["estonian"], portugal: ["portuguese"], nigeria: ["nigerian"], kenya: ["kenyan"], "south africa": ["south african"],
-  egypt: ["egyptian"], brazil: ["brazilian"], mexico: ["mexican"], canada: ["canadian"], australia: ["australian"],
-  singapore: ["singaporean"], japan: ["japanese"], china: ["chinese"], "south korea": ["korean", "south korean"],
-  indonesia: ["indonesian"], "united arab emirates": ["emirati", "uae"], "saudi arabia": ["saudi"], hungary: ["hungarian"],
-  "czech republic": ["czech"], czechia: ["czech"], slovakia: ["slovak"], romania: ["romanian"], ukraine: ["ukrainian"],
-};
-const COUNTRY_ALIASES: Record<string, string> = {
-  usa: "united states", us: "united states", "united states of america": "united states", uk: "united kingdom",
-  "great britain": "united kingdom", england: "united kingdom", uae: "united arab emirates", korea: "south korea",
-};
-const normCountry = (c: string) => {
-  const k = c.toLowerCase().replace(/^the /, "").replace(/\./g, "").trim();
-  return COUNTRY_ALIASES[k] ?? k;
-};
 
 export type CompanyToResolve = {
   name: string;
