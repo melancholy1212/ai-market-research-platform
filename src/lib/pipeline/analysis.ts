@@ -1,4 +1,5 @@
 import type { JsonSchema } from "@/lib/ai/types";
+import { ENTITY_TYPES, type EntityType } from "@/lib/entities/assess";
 import { displayHost } from "@/lib/url";
 
 // Turns the collected, deduplicated sources of a research into a structured,
@@ -15,6 +16,8 @@ export type AnalysisSource = {
   snippet: string | null;
   // Other outlets that reported the same story (from dedup).
   alsoReportedBy: number;
+  // Relevance class; contextual sources are background, not direct answers.
+  label?: "direct" | "contextual";
 };
 
 export const LIMITS = {
@@ -52,6 +55,8 @@ export const ANALYSIS_SCHEMA: JsonSchema = obj({
     type: "array",
     items: obj({
       name: str("company name as written in the sources"),
+      entity_type: { type: "string", enum: [...ENTITY_TYPES], description: "kind of organization, judged from the sources" },
+      type_evidence: str("the source evidence for entity_type in a few words, e.g. 'founded 2021, raised seed round'"),
       country: str("country, or empty string if the sources do not say"),
       focus: str("what the company does, a few words"),
       website: str("website domain only if it appears in the sources, else empty string"),
@@ -72,11 +77,6 @@ export const ANALYSIS_SCHEMA: JsonSchema = obj({
     type: "array",
     items: obj({ title: str("trend name"), summary: str("1-2 sentences"), source_ids: ids }),
   },
-  off_topic_source_ids: {
-    type: "array",
-    items: { type: "string" },
-    description: "IDs of listed sources that are not actually about the research question",
-  },
 });
 
 export const ANALYSIS_SYSTEM = `You are a market research analyst. You write structured analyses strictly from the numbered sources you are given.
@@ -87,8 +87,10 @@ Rules:
 - Ignore sources that are off-topic for the research question.
 - If the sources do not support a field, use an empty string. Never guess dates, countries or websites.
 - A trend must be supported by at least two sources.
-- List in off_topic_source_ids the IDs of sources that are not actually about the research question (wrong topic or wrong place). Do not list sources you cite.
 - Limits: at most ${LIMITS.keyFindings} key findings, ${LIMITS.companies} companies, ${LIMITS.developments} developments, ${LIMITS.trends} trends. Fewer is fine; do not pad.
+- Classify each company's entity_type from what the sources say (founding year, funding stage, "startup", listed, subsidiary, investor, university...), never from the name: startup = young company, typically venture-funded; established_company = mature or listed company; investor = VC fund or investment firm; partner = organization mentioned mainly as a customer or collaborator; research_institution = university or lab; other = anything else. If unsure, choose other.
+- If the question asks for a kind of organization (e.g. startups), list those first; include other kinds only when they play a clear role, and never label them as that kind.
+- Sources marked [context] are background: use them for the overview and trends, but base companies and developments mainly on the other sources.
 - Write in English, plainly, without marketing language.`;
 
 // Conservative token estimate (English prose runs ~4 characters per token).
@@ -122,8 +124,9 @@ export function buildAnalysisPrompt(
       displayHost(source.url),
       source.alsoReportedBy > 0 ? `also reported by ${source.alsoReportedBy} other outlets` : null,
     ].filter(Boolean);
+    const tag = source.label === "contextual" ? "[context] " : "";
     const snippet = source.snippet ? `\n   ${source.snippet.replace(/\s+/g, " ").slice(0, snippetChars)}` : "";
-    const line = `[${alias}] ${source.title ?? "(untitled)"} | ${meta.join(" | ")}${snippet}`;
+    const line = `[${alias}] ${tag}${source.title ?? "(untitled)"} | ${meta.join(" | ")}${snippet}`;
     const cost = estimateTokens(line);
     if (cost > budget) break;
     budget -= cost;
@@ -152,11 +155,16 @@ export type Cited = { sourceIds: string[] };
 export type Analysis = {
   summary: string;
   keyFindings: (Cited & { text: string })[];
-  companies: (Cited & { name: string; country: string | null; focus: string | null; domain: string | null })[];
+  companies: (Cited & {
+    name: string;
+    entityType: EntityType;
+    typeEvidence: string | null;
+    country: string | null;
+    focus: string | null;
+    domain: string | null;
+  })[];
   developments: (Cited & { title: string; summary: string | null; date: string | null; company: string | null })[];
   trends: (Cited & { title: string; summary: string | null })[];
-  // Sources the model judged off-topic (never ones it cited).
-  offTopicSourceIds: string[];
 };
 
 export type ValidationStats = {
@@ -261,7 +269,8 @@ export function parseAnalysis(
       if (host && mentionsHost(seen, host)) domain = host;
       else stats.droppedWebsites++;
     }
-    return { name, country: text(i.country), focus: text(i.focus), domain, sourceIds };
+    const entityType = ENTITY_TYPES.includes(i.entity_type as EntityType) ? (i.entity_type as EntityType) : "other";
+    return { name, entityType, typeEvidence: text(i.type_evidence), country: text(i.country), focus: text(i.focus), domain, sourceIds };
   });
 
   const developments = items(d.recent_developments, LIMITS.developments, (i, sourceIds) => {
@@ -277,11 +286,5 @@ export function parseAnalysis(
     return title && sourceIds.length >= 2 ? { title, summary: text(i.summary), sourceIds } : null;
   });
 
-  const cited = new Set([...keyFindings, ...companies, ...developments, ...trends].flatMap((x) => x.sourceIds));
-  const offTopicSourceIds = arr(d.off_topic_source_ids)
-    .map((v) => (typeof v === "string" ? aliases.get(v.trim().toUpperCase().replace(/^SOURCE_?/, "S")) : undefined))
-    .filter((id): id is string => Boolean(id) && !cited.has(id!))
-    .filter((id, i, all) => all.indexOf(id) === i);
-
-  return { analysis: { summary, keyFindings, companies, developments, trends, offTopicSourceIds }, stats };
+  return { analysis: { summary, keyFindings, companies, developments, trends }, stats };
 }

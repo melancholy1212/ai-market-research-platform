@@ -3,6 +3,7 @@ import "server-only";
 import { ProviderError } from "@/lib/http";
 import type { Analysis } from "@/lib/pipeline/analysis";
 
+import { assessVerification, reconcileEntityType, type Verification } from "./assess";
 import { clearbitDomain } from "./clearbit";
 import { registrableDomain } from "./domain";
 import { resolveCompany, type Resolution } from "./resolve";
@@ -25,7 +26,11 @@ export type ResolvedCompany = ExtractedCompany & {
     confidence: number | null;
     signals: string[];
     reason: string | null;
+    wikidataCountry: string | null;
   };
+  // Where the entity type came from when Wikidata overruled the sources.
+  typeEvidence: string | null;
+  verification: Verification;
 };
 
 export type ResolutionStats = {
@@ -38,12 +43,28 @@ export type ResolutionStats = {
   searchLookups: number;
   searchUnavailable: boolean;
   clearbitErrors: number;
+  // Website lookups skipped because the time budget ran out.
+  skippedForTime: number;
   wikidataErrors: number;
 };
 
 // Paid web-search lookups per research; everything else is free or cached.
 const MAX_SEARCH_LOOKUPS = 3;
+// Resolution must leave the run comfortably inside Vercel's 300s limit.
+// Past this budget, remaining website lookups are skipped (and counted).
+const TIME_BUDGET_MS = 90_000;
 const WIKIDATA_CONCURRENCY = 3;
+
+export function verifyCompany(c: ResolvedCompany, sourceUrls: ReadonlyMap<string, string[]>): Verification {
+  return assessVerification({
+    wikidataMatch: c.resolution.status === "resolved",
+    websiteSource: c.domain ? c.websiteSource : null,
+    citedSourceUrls: c.sourceIds.flatMap((id) => sourceUrls.get(id) ?? []),
+    country: c.country,
+    wikidataCountry: c.resolution.wikidataCountry,
+    domain: c.domain,
+  });
+}
 
 async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out = new Array<R>(items.length);
@@ -59,7 +80,16 @@ async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise
   return out;
 }
 
-export async function resolveCompanies(companies: ExtractedCompany[], context: string) {
+// `sourceUrls` maps each cited source id to the URLs of every outlet that
+// reported that story, for judging coverage in verification confidence.
+export async function resolveCompanies(
+  companies: ExtractedCompany[],
+  context: string,
+  sourceUrls: ReadonlyMap<string, string[]> = new Map(),
+  timeBudgetMs = TIME_BUDGET_MS,
+) {
+  const deadline = Date.now() + timeBudgetMs;
+  const outOfTime = () => Date.now() > deadline;
   const stats: ResolutionStats = {
     resolved: 0,
     ambiguous: 0,
@@ -69,6 +99,7 @@ export async function resolveCompanies(companies: ExtractedCompany[], context: s
     searchLookups: 0,
     searchUnavailable: false,
     clearbitErrors: 0,
+    skippedForTime: 0,
     wikidataErrors: 0,
   };
 
@@ -96,9 +127,18 @@ export async function resolveCompanies(companies: ExtractedCompany[], context: s
       match?.matchedCountry ?? match?.entity.countryIds.map((id) => countryLabels.get(id)).find(Boolean) ?? null;
     const wikidataDomain = match?.entity.websites.map(registrableDomain).find(Boolean) ?? null;
     const domain = company.domain ?? wikidataDomain;
+    const type = reconcileEntityType(
+      company.entityType,
+      company.typeEvidence,
+      match ? { inceptionYear: match.entity.inceptionYear, instanceOf: match.entity.instanceOf } : null,
+    );
 
     return {
       ...company,
+      entityType: type.type,
+      typeEvidence: type.evidence,
+      // Filled in once websites and merges are settled.
+      verification: { confidence: "low" as const, signals: [] },
       // Structured data wins over text extraction when the match is confident.
       country: wikidataCountry ?? company.country,
       domain,
@@ -112,6 +152,7 @@ export async function resolveCompanies(companies: ExtractedCompany[], context: s
         confidence: r.status === "resolved" ? r.confidence : null,
         signals: match?.signals ?? [],
         reason: r.status === "unresolved" ? r.reason : r.status === "ambiguous" ? "several candidates fit equally well" : null,
+        wikidataCountry,
       },
     };
   });
@@ -130,6 +171,10 @@ export async function resolveCompanies(companies: ExtractedCompany[], context: s
     resolved.filter((c) => !c.domain),
     4,
     async (c) => {
+      if (outOfTime()) {
+        stats.skippedForTime++;
+        return;
+      }
       try {
         setWebsite(c, await clearbitDomain(c.name, c.country), "clearbit");
       } catch (error) {
@@ -156,6 +201,10 @@ export async function resolveCompanies(companies: ExtractedCompany[], context: s
   if (!tavilyWebsiteConfigured()) stats.searchUnavailable = uncached.length > 0;
   for (const company of uncached) {
     if (stats.searchUnavailable || stats.searchLookups >= MAX_SEARCH_LOOKUPS) break;
+    if (outOfTime()) {
+      stats.skippedForTime += uncached.length - uncached.indexOf(company);
+      break;
+    }
     try {
       const { domain, fromCache } = await findWebsiteWithTavily(company.name, hint(company));
       if (!fromCache) stats.searchLookups++;
@@ -184,6 +233,9 @@ export async function resolveCompanies(companies: ExtractedCompany[], context: s
     same.country ??= company.country;
     same.focus ??= company.focus;
   }
+
+  // 4. Verification confidence from every signal gathered above.
+  for (const c of merged) c.verification = verifyCompany(c, sourceUrls);
 
   // Counts describe the final, merged companies.
   for (const c of merged) {

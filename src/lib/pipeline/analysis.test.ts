@@ -69,7 +69,15 @@ describe("parseAnalysis", () => {
       emerging_trends: [{ title: "Large rounds", summary: "Big rounds.", source_ids: ["S1", "S2"] }],
     });
     expect(analysis.keyFindings).toEqual([{ text: "Exein raised $270M.", sourceIds: ["uuid-1"] }]);
-    expect(analysis.companies[0]).toEqual({ name: "Exein", country: "Italy", focus: "Embedded security", domain: null, sourceIds: ["uuid-1"] });
+    expect(analysis.companies[0]).toEqual({
+      name: "Exein",
+      entityType: "other",
+      typeEvidence: null,
+      country: "Italy",
+      focus: "Embedded security",
+      domain: null,
+      sourceIds: ["uuid-1"],
+    });
     expect(analysis.developments[0]).toMatchObject({ date: "2026-09-15", company: "Exein", summary: null, sourceIds: ["uuid-1"] });
     expect(analysis.trends[0].sourceIds).toEqual(["uuid-1", "uuid-2"]);
     expect(stats).toEqual({ droppedItems: 0, droppedCitations: 0, droppedWebsites: 0 });
@@ -134,17 +142,23 @@ describe("parseAnalysis", () => {
     expect(analysis.keyFindings[0].sourceIds).toEqual(["uuid-1", "uuid-2", "uuid-3"]);
   });
 
-  it("returns off-topic sources, ignoring invented ids and sources it cites", () => {
+  it("reads entity types and rejects invented ones", () => {
     const { analysis } = parse({
       ...base,
-      overview: { summary: "S.", key_findings: [{ text: "x", source_ids: ["S1"] }] },
-      off_topic_source_ids: ["S3", "S1", "S77", "s3"],
+      companies: [
+        { name: "Exein", entity_type: "startup", type_evidence: "founded 2018, raised Series C", country: "", focus: "", website: "", source_ids: ["S1"] },
+        { name: "Renesas", entity_type: "megacorp", type_evidence: "", country: "", focus: "", website: "", source_ids: ["S2"] },
+      ],
     });
-    expect(analysis.offTopicSourceIds).toEqual(["uuid-3"]);
+    expect(analysis.companies.map((c) => [c.entityType, c.typeEvidence])).toEqual([
+      ["startup", "founded 2018, raised Series C"],
+      ["other", null],
+    ]);
   });
 
-  it("treats a missing off-topic list as empty", () => {
-    expect(parse(base).analysis.offTopicSourceIds).toEqual([]);
+  it("tags contextual sources in the prompt", () => {
+    const { prompt: p } = buildAnalysisPrompt({ query: "q", focus: null }, [{ ...sources[0], label: "contextual" }]);
+    expect(p).toContain("[S1] [context] Exein raises");
   });
 
   it("rejects output without a summary or that is not JSON", () => {

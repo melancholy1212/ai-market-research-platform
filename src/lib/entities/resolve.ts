@@ -16,12 +16,23 @@ export type WikidataEntity = {
   instanceOf: string[];
   countryIds: string[];
   websites: string[];
+  inceptionYear: number | null;
 };
 
 type Claim = { mainsnak?: { datavalue?: { value?: unknown } }; rank?: string };
 
 const claimValues = (claims: Record<string, Claim[]> | undefined, prop: string): unknown[] =>
   (claims?.[prop] ?? []).filter((c) => c.rank !== "deprecated").map((c) => c.mainsnak?.datavalue?.value);
+
+// Wikidata times look like "+2013-00-00T00:00:00Z"; the year is enough.
+function inceptionYear(values: unknown[]): number | null {
+  for (const v of values) {
+    const time = (v as { time?: unknown } | null)?.time;
+    const m = typeof time === "string" ? /^\+?(\d{4})-/.exec(time) : null;
+    if (m) return Number(m[1]);
+  }
+  return null;
+}
 
 // Parses a wbgetentities response into the fields resolution uses.
 export function parseWikidataEntities(response: unknown): WikidataEntity[] {
@@ -47,6 +58,7 @@ export function parseWikidataEntities(response: unknown): WikidataEntity[] {
         instanceOf: ids("P31"),
         countryIds: ids("P17"),
         websites: claimValues(e.claims, "P856").filter((v): v is string => typeof v === "string"),
+        inceptionYear: inceptionYear(claimValues(e.claims, "P571")),
       },
     ];
   });

@@ -23,6 +23,7 @@ describe("parseWikidataEntities", () => {
       countryIds: ["Q668"],
       websites: ["https://cred.club/"],
     });
+    expect(byId.get("Q27907429")?.inceptionYear).toBe(2013);
   });
   it("skips missing entities", () => {
     expect(parseWikidataEntities({ entities: { Q1: { id: "Q1", missing: "" } } })).toEqual([]);
@@ -78,7 +79,7 @@ describe("resolveCompany", () => {
   });
 
   it("reports ambiguity when two candidates are equally good", () => {
-    const twin = { ...byId.get("Q106455641")!, id: "Q999", websites: [] };
+    const twin = { ...byId.get("Q106455641")!, id: "Q999", websites: [] as string[] };
     const r = resolveCompany(company({ name: "CRED", country: "India" }), [byId.get("Q106455641")!, twin], countries, INDIA_FINTECH);
     expect(r.status).toBe("ambiguous");
   });
