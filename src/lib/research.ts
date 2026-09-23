@@ -94,3 +94,44 @@ export async function listEvents(researchId: string): Promise<ResearchEvent[]> {
   if (error) throw new Error(`Failed to load research progress: ${error.message}`);
   return data;
 }
+
+export type Report = Tables<"reports">;
+export type Entity = Tables<"entities">;
+export type Finding = Tables<"findings"> & { sourceIds: string[] };
+
+export type ResearchAnalysis = {
+  report: Report | null;
+  companies: Entity[];
+  findings: Finding[];
+};
+
+export async function getAnalysis(researchId: string): Promise<ResearchAnalysis> {
+  const supabase = getSupabase();
+  const [report, entities, findings] = await Promise.all([
+    supabase.from("reports").select("*").eq("research_id", researchId).maybeSingle(),
+    supabase.from("entities").select("*").eq("research_id", researchId).order("created_at"),
+    supabase
+      .from("findings")
+      .select("*, finding_sources(source_id)")
+      .eq("research_id", researchId)
+      .order("occurred_at", { ascending: false, nullsFirst: false })
+      .order("created_at"),
+  ]);
+  const error = report.error ?? entities.error ?? findings.error;
+  if (error) throw new Error(`Failed to load analysis: ${error.message}`);
+
+  return {
+    report: report.data,
+    companies: entities.data ?? [],
+    findings: (findings.data ?? []).map(({ finding_sources, ...f }) => ({
+      ...f,
+      sourceIds: (finding_sources ?? []).map((fs) => fs.source_id),
+    })),
+  };
+}
+
+// Source ids a company was cited with (stored on the entity by the analysis).
+export function entitySourceIds(entity: Entity): string[] {
+  const ids = (entity.metadata as { source_ids?: unknown } | null)?.source_ids;
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+}

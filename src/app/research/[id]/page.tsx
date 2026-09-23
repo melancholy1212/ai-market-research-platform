@@ -2,20 +2,29 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import {
+  CompaniesSection,
+  DevelopmentsSection,
+  OverviewSection,
+  TrendsSection,
+} from "@/components/analysis-sections";
 import { AutoRefresh } from "@/components/auto-refresh";
+import type { CitationTarget } from "@/components/citations";
 import { EmptyState } from "@/components/empty-state";
 import { ProgressLog } from "@/components/progress-log";
 import { SetupNotice } from "@/components/setup-notice";
-import { groupSourcesByStory, SourceList } from "@/components/source-list";
+import { groupSourcesByStory, sourceAnchor, SourceList, type Story } from "@/components/source-list";
 import { StatusBadge } from "@/components/status-badge";
 import { MissingEnvError } from "@/lib/env";
 import { formatDateTime } from "@/lib/format";
 import {
+  getAnalysis,
   getResearch,
   isStale,
   listEvents,
   listSources,
   type Research,
+  type ResearchAnalysis,
   type ResearchEvent,
   type Source,
 } from "@/lib/research";
@@ -28,11 +37,10 @@ const STATUS_NOTES: Partial<Record<ResearchStatus, string>> = {
   planning: "Planning searches for the question.",
   collecting: "Searching news and web sources.",
   processing: "Cleaning up sources and grouping duplicate stories.",
-  analyzing: "Analyzing findings.",
+  analyzing: "Analyzing the sources with AI. This usually takes under a minute.",
 };
 
-// Analysis sections render as empty states until the stages that fill them
-// exist; no placeholder data is shown.
+// Placeholders shown until a research has an analysis; never fake data.
 const ANALYSIS_SECTIONS = [
   { title: "Overview", empty: "A summary of the topic, written from the collected sources." },
   { title: "Companies", empty: "Organizations identified during research, with country, focus and website." },
@@ -40,15 +48,33 @@ const ANALYSIS_SECTIONS = [
   { title: "Emerging trends", empty: "Patterns that recur across multiple sources." },
 ];
 
+// Citation number for every source id: stories are numbered in list order,
+// and duplicates share their story's number.
+function citationIndex(stories: Story[]): Map<string, CitationTarget> {
+  const index = new Map<string, CitationTarget>();
+  stories.forEach(({ primary, alsoReported }, i) => {
+    const target = {
+      number: i + 1,
+      anchor: sourceAnchor(primary.id),
+      label: [primary.title, primary.publisher].filter(Boolean).join(" — "),
+    };
+    for (const s of [primary, ...alsoReported]) index.set(s.id, target);
+  });
+  return index;
+}
+
 export default async function ResearchDetailPage({ params }: PageProps<"/research/[id]">) {
   const { id } = await params;
 
   let research: Research | null;
   let sources: Source[] = [];
   let events: ResearchEvent[] = [];
+  let analysis: ResearchAnalysis | null = null;
   try {
     research = await getResearch(id);
-    if (research) [sources, events] = await Promise.all([listSources(id), listEvents(id)]);
+    if (research) {
+      [sources, events, analysis] = await Promise.all([listSources(id), listEvents(id), getAnalysis(id)]);
+    }
   } catch (error) {
     if (error instanceof MissingEnvError) return <SetupNotice missing={error.missing} />;
     throw error;
@@ -60,6 +86,8 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
   const running = !terminal && !stale;
   const note = running ? STATUS_NOTES[research.status] : undefined;
   const stories = groupSourcesByStory(sources);
+  const citations = citationIndex(stories);
+  const analysisFailed = events.some((e) => e.stage === "analyzing" && e.level === "warning");
 
   return (
     <div>
@@ -107,21 +135,32 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
       )}
 
       <div className="mt-8 space-y-8">
-        {ANALYSIS_SECTIONS.map((section) => (
-          <section key={section.title}>
-            <h2 className="text-lg font-semibold tracking-tight">{section.title}</h2>
-            <div className="mt-3">
-              <EmptyState
-                title={research.status === "completed" ? "Not analyzed yet" : "Nothing here yet"}
-                description={
-                  research.status === "completed"
-                    ? `${section.empty} Automated analysis is not enabled yet; sources below are real.`
-                    : section.empty
-                }
-              />
-            </div>
-          </section>
-        ))}
+        {analysis?.report ? (
+          <>
+            <OverviewSection analysis={analysis} citations={citations} />
+            <CompaniesSection analysis={analysis} citations={citations} />
+            <DevelopmentsSection analysis={analysis} citations={citations} />
+            <TrendsSection analysis={analysis} citations={citations} />
+          </>
+        ) : (
+          ANALYSIS_SECTIONS.map((section) => (
+            <section key={section.title}>
+              <h2 className="text-lg font-semibold tracking-tight">{section.title}</h2>
+              <div className="mt-3">
+                <EmptyState
+                  title={running ? "Nothing here yet" : analysisFailed ? "Analysis unavailable" : "Not analyzed"}
+                  description={
+                    running
+                      ? section.empty
+                      : analysisFailed
+                        ? "The AI analysis could not be completed for this research; the run log explains why. The sources below are real."
+                        : "This research was collected before AI analysis was enabled. The sources below are real."
+                  }
+                />
+              </div>
+            </section>
+          ))
+        )}
 
         <section>
           <h2 className="text-lg font-semibold tracking-tight">

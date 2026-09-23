@@ -4,10 +4,10 @@ Turns a natural-language market research question into a structured,
 source-backed research report: companies, recent developments, and emerging
 trends, with every finding traceable to the sources that support it.
 
-> **Status: early development.** Research runs collect and store real sources
-> from web and news search. Entity resolution and AI analysis are being built
-> milestone by milestone. Nothing in the app is mocked: sections with no real
-> data show empty states.
+> **Status: working MVP.** Research runs collect real sources from web and
+> news search, deduplicate them, and produce a source-backed AI analysis
+> (overview, companies, developments, trends) where every claim links to the
+> sources that support it. Nothing in the app is mocked.
 
 ## Planned pipeline
 
@@ -96,6 +96,43 @@ All deterministic; no LLM involved.
    Italian unicorn Exein rides the physical AI wave") are not caught; that is
    left to the AI stages.
 
+## AI analysis and source attribution
+
+After sources are stored, the run makes **one** AI call over the story
+primaries (duplicates are not sent) and saves the result with the research.
+Opening a finished research never calls the AI again.
+
+- **Input**: a compact, line-per-source list (title, publisher, date, domain,
+  short snippet, "also reported by N outlets"), sources referred to as
+  `S1..Sn`. The model is told to use only these sources, not its own
+  knowledge, and to cite source IDs for every item.
+- **Output**: JSON enforced by the provider's structured-output mode, with the
+  same schema for every provider (overview + key findings, companies, recent
+  developments, emerging trends).
+- **Validation** (code, not trust): aliases are mapped back to real source
+  IDs; citations to unknown IDs are dropped, and items left without a
+  citation are dropped; a trend needs at least two sources; dates must be
+  real and not in the future; a company website is kept only if that exact
+  domain appears in the sources. The run log reports how many claims were
+  discarded.
+- **Persistence**: `save_research_analysis`, a Postgres function, stores
+  companies (`entities`), findings, their evidence links
+  (`finding_sources`) and the report in one transaction, re-checks that every
+  cited source belongs to the research, and refuses a second analysis. It is
+  not executable with the public key.
+- **In the UI**, every claim carries numbered citations that jump to the
+  supporting source (and its "also reported by" outlets) in the source list.
+
+**Providers and fallback.** Gemini and Groq, both on free tiers, behind an
+`AIProvider` interface. The chain is each model in `GEMINI_MODELS` in turn,
+then Groq (`AI_PROVIDERS` reorders it). A provider is skipped on any failure:
+HTTP errors, rate limits, quota, timeouts, or output that fails validation.
+Free Flash models are often overloaded (HTTP 503), so Flash-Lite follows Flash.
+Prompts are sized per provider: Groq's free tier allows 8,000 tokens per
+minute, so its prompt keeps the most informative sources that fit (typically
+~30 of 60), with shorter snippets. If every provider fails, the research still
+completes with its sources and the log says why there is no analysis.
+
 **Caching**: raw provider responses are cached in Postgres
 (`provider_cache`) keyed by a hash of the request, for 24h (web) or 6h
 (news). Feeds are validated before caching, so a blocked or HTML response
@@ -106,7 +143,7 @@ apply to cached data immediately.
 
 - **Next.js 16** (App Router, TypeScript, Tailwind CSS 4), deployed on **Vercel**
 - **Supabase** (PostgreSQL)
-- **Claude** as the initial AI provider, behind a provider interface
+- **Gemini** with **Groq** fallback (free tiers), behind a provider interface
 
 ## Project structure
 
@@ -120,6 +157,7 @@ src/
     research.ts         research queries
     pipeline/           run orchestration, search plan, merge, normalize, dedup
     providers/          Tavily and news-site (RSS) search, provider cache
+    ai/                 Gemini and Groq clients, fallback chain
     http.ts             timeouts, retries, typed provider errors
     url.ts              URL normalization
     supabase/           server-only Supabase client + database types
@@ -137,7 +175,7 @@ supabase/migrations/    SQL schema
 | `entities` | Resolved organizations; unique per research on domain, never on name alone |
 | `findings` | Developments, trends and facts, optionally tied to an entity |
 | `finding_sources` | Evidence links: which sources support which finding |
-| `reports` | Synthesized narrative (overview, key takeaways) for a research |
+| `reports` | AI overview for a research, with provider/model/token metadata |
 
 Row level security is enabled on every table with no policies. The public
 Supabase key can read nothing, and all database access happens in server code.
@@ -179,6 +217,11 @@ npm run build
 | `SUPABASE_URL` | yes | Project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | Server-only secret key. Never prefix with `NEXT_PUBLIC_` |
 | `TAVILY_API_KEY` | no | Web/news search. Without it, runs use the news-site search only |
+| `GEMINI_API_KEY` | one of these two | AI analysis, primary |
+| `GROQ_API_KEY` | one of these two | AI analysis, fallback |
+| `GEMINI_MODELS` | no | Comma-separated, tried in order. Default `gemini-3.5-flash,gemini-3.5-flash-lite` |
+| `GROQ_MODEL` | no | Default `openai/gpt-oss-120b` |
+| `AI_PROVIDERS` | no | Fallback order, default `gemini,groq` |
 | `RESEARCH_HOURLY_LIMIT` | no | Research runs allowed per rolling hour, app-wide. Default 20 |
 | `SUPABASE_DB_PASSWORD` | no | Used only by the Supabase CLI for `db push`; the app never reads it |
 
