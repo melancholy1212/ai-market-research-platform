@@ -8,7 +8,14 @@ function foundByCount(source: Source): number {
   return Array.isArray(foundBy) ? foundBy.length : 0;
 }
 
-export type Story = { primary: Source; alsoReported: Source[] };
+export type Story = { primary: Source; alsoReported: Source[]; number?: number };
+
+export type StoryLabel = "direct" | "contextual" | "irrelevant";
+
+// Older research has no label: fall back to the relevant flag.
+export function storyLabel(story: Story): StoryLabel {
+  return story.primary.relevance_label ?? (story.primary.is_relevant === false ? "irrelevant" : "direct");
+}
 
 // Groups sources by story: each primary with the duplicates that point at it.
 // A duplicate whose primary is missing is shown as its own story.
@@ -28,15 +35,16 @@ export const sourceAnchor = (id: string) => `source-${id}`;
 export function SourceList({ stories }: { stories: Story[] }) {
   return (
     <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
-      {stories.map(({ primary, alsoReported }, i) => {
+      {stories.map(({ primary, alsoReported, number }, i) => {
         const hits = foundByCount(primary);
+        const label = primary.relevance_label;
         return (
           <li
             key={primary.id}
             id={sourceAnchor(primary.id)}
             className="flex scroll-mt-20 gap-3 px-4 py-3.5 target:bg-accent/10"
           >
-            <span className="w-6 shrink-0 pt-0.5 text-right font-mono text-xs text-muted">{i + 1}</span>
+            <span className="w-6 shrink-0 pt-0.5 text-right font-mono text-xs text-muted">{number ?? i + 1}</span>
             <div className="min-w-0 flex-1">
               <a
                 href={primary.url}
@@ -53,7 +61,11 @@ export function SourceList({ stories }: { stories: Story[] }) {
                 {primary.publisher && <span>{primary.publisher}</span>}
                 {primary.published_at && <time dateTime={primary.published_at}>{formatDate(primary.published_at)}</time>}
                 {hits > 1 && <span>Found by {hits} searches</span>}
+                {label === "contextual" && (
+                  <span className="rounded bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-700 dark:text-amber-300">Context</span>
+                )}
               </p>
+              {primary.relevance_reason && <p className="mt-1 text-xs text-muted italic">{primary.relevance_reason}</p>}
               {primary.extracted_text && (
                 <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted">{primary.extracted_text}</p>
               )}
@@ -85,6 +97,7 @@ export function SourceList({ stories }: { stories: Story[] }) {
 }
 
 function setAsideReason(source: Source, aiOffTopic: ReadonlySet<string>): string {
+  if (source.relevance_reason) return source.relevance_reason;
   if (aiOffTopic.has(source.id)) return "judged off-topic by the AI";
   const reasons = (source.metadata as { relevance?: { reasons?: unknown } } | null)?.relevance?.reasons;
   const list = Array.isArray(reasons) ? reasons.filter((r): r is string => typeof r === "string" && !r.startsWith("found by")) : [];
@@ -93,12 +106,20 @@ function setAsideReason(source: Source, aiOffTopic: ReadonlySet<string>): string
 
 // Stories set aside as off-topic: still listed, so nothing disappears
 // silently, but outside the numbered evidence list.
-export function SetAsideSources({ stories, aiOffTopic }: { stories: Story[]; aiOffTopic: ReadonlySet<string> }) {
+export function SetAsideSources({
+  stories,
+  aiOffTopic,
+  open = false,
+}: {
+  stories: Story[];
+  aiOffTopic: ReadonlySet<string>;
+  open?: boolean;
+}) {
   if (stories.length === 0) return null;
   return (
-    <details className="mt-4 rounded-lg border border-border bg-surface px-4 py-3">
+    <details open={open} className="mt-4 rounded-lg border border-border bg-surface px-4 py-3">
       <summary className="cursor-pointer text-sm font-medium select-none">
-        Set aside as off-topic <span className="font-normal text-muted">({stories.length})</span>
+        Filtered out as irrelevant <span className="font-normal text-muted">({stories.length})</span>
       </summary>
       <p className="mt-2 text-xs text-muted">
         Collected by the searches but not about this question, so not used in the analysis.

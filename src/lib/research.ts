@@ -193,3 +193,34 @@ export async function listResearchSummaries(
     overview: (Array.isArray(reports) ? reports[0]?.overview : reports?.overview) ?? null,
   }));
 }
+
+export type EntityVerification = { confidence: "high" | "medium" | "low"; signals: string[] };
+
+// Evidence-based confidence stored with the entity; null for entities saved
+// before multi-signal verification existed.
+export function entityVerification(entity: Entity): EntityVerification | null {
+  const v = (entity.metadata as { verification?: { confidence?: unknown; signals?: unknown } } | null)?.verification;
+  if (!v || (v.confidence !== "high" && v.confidence !== "medium" && v.confidence !== "low")) return null;
+  return {
+    confidence: v.confidence,
+    signals: Array.isArray(v.signals) ? v.signals.filter((x): x is string => typeof x === "string") : [],
+  };
+}
+
+export function entityTypeEvidence(entity: Entity): string | null {
+  const e = (entity.metadata as { type_evidence?: unknown } | null)?.type_evidence;
+  return typeof e === "string" ? e : null;
+}
+
+export type ResearchConstraints = { topic: string; geography: string[]; entityType: string; method?: string };
+
+export function researchConstraints(research: Research): ResearchConstraints | null {
+  const c = research.constraints as Partial<ResearchConstraints> | null;
+  if (!c || typeof c.topic !== "string") return null;
+  return {
+    topic: c.topic,
+    geography: Array.isArray(c.geography) ? c.geography.filter((g): g is string => typeof g === "string") : [],
+    entityType: typeof c.entityType === "string" ? c.entityType : "any",
+    method: typeof c.method === "string" ? c.method : undefined,
+  };
+}

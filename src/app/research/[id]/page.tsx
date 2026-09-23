@@ -17,7 +17,8 @@ import { ProgressLog } from "@/components/progress-log";
 import { ResearchFunnel, type FunnelStep } from "@/components/research-funnel";
 import { SetupNotice } from "@/components/setup-notice";
 import { Bone } from "@/components/skeleton";
-import { groupSourcesByStory, SetAsideSources, sourceAnchor, SourceList, type Story } from "@/components/source-list";
+import { groupSourcesByStory, sourceAnchor, storyLabel, type Story } from "@/components/source-list";
+import { SourceTabs } from "@/components/source-tabs";
 import { StatusBadge } from "@/components/status-badge";
 import { MissingEnvError } from "@/lib/env";
 import { formatDateTime, formatDuration } from "@/lib/format";
@@ -25,9 +26,11 @@ import {
   entityResolution,
   getAnalysis,
   getResearch,
+  entityVerification,
   isStale,
   listEvents,
   listSources,
+  researchConstraints,
   type Research,
   type ResearchAnalysis,
   type ResearchEvent,
@@ -58,9 +61,9 @@ const STATUS_NOTES: Partial<Record<ResearchStatus, string>> = {
 // and duplicates share their story's number.
 function citationIndex(stories: Story[]): Map<string, CitationTarget> {
   const index = new Map<string, CitationTarget>();
-  stories.forEach(({ primary, alsoReported }, i) => {
+  stories.forEach(({ primary, alsoReported, number }, i) => {
     const target = {
-      number: i + 1,
+      number: number ?? i + 1,
       anchor: sourceAnchor(primary.id),
       label: [primary.title, primary.publisher].filter(Boolean).join(" — "),
     };
@@ -78,29 +81,37 @@ function resultsCollected(events: ResearchEvent[], fallback: number): number {
   return fallback;
 }
 
-type ReportMeta = { provider?: string; model?: string; input_tokens?: number | null; output_tokens?: number | null; sources_analyzed?: number };
+type ReportMeta = {
+  provider?: string;
+  model?: string;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  sources_analyzed?: number;
+};
+
+const PROVIDER_NAME: Record<string, string> = { gemini: "Gemini", groq: "Groq" };
+
+// "40s · 39 sources analyzed · Gemini": the run in user terms.
+function runSummary(research: Research, meta: ReportMeta): string | null {
+  const parts = [
+    research.completed_at ? formatDuration(Date.parse(research.completed_at) - Date.parse(research.created_at)) : null,
+    meta.sources_analyzed ? `${meta.sources_analyzed} sources analyzed` : null,
+    meta.provider ? (PROVIDER_NAME[meta.provider] ?? meta.provider) : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+type Row = [string, string];
 
 function Sidebar({
-  research,
-  analysis,
   sections,
+  summary,
+  advanced,
 }: {
-  research: Research;
-  analysis: ResearchAnalysis | null;
   sections: { id: string; title: string; count?: number }[];
+  summary: string | null;
+  advanced: Row[][];
 }) {
-  const meta = (analysis?.report?.metadata ?? {}) as ReportMeta;
-  const details: [string, string][] = [
-    ["Created", formatDateTime(research.created_at)],
-    ...(research.completed_at
-      ? [["Duration", formatDuration(Date.parse(research.completed_at) - Date.parse(research.created_at))] as [string, string]]
-      : []),
-    ...(meta.model ? [["Model", meta.model] as [string, string]] : []),
-    ...(meta.sources_analyzed ? [["Sources analyzed", String(meta.sources_analyzed)] as [string, string]] : []),
-    ...(meta.input_tokens
-      ? [["Tokens", `${meta.input_tokens.toLocaleString("en")} in · ${(meta.output_tokens ?? 0).toLocaleString("en")} out`] as [string, string]]
-      : []),
-  ];
   return (
     <aside className="hidden lg:block">
       <div className="sticky top-20 space-y-6">
@@ -118,15 +129,23 @@ function Sidebar({
           </ul>
         </nav>
         <div>
-          <p className="text-xs font-medium tracking-wide text-muted uppercase">Run details</p>
-          <dl className="mt-2 space-y-1.5 text-sm">
-            {details.map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-3">
-                <dt className="text-muted">{k}</dt>
-                <dd className="text-right tabular-nums">{v}</dd>
-              </div>
-            ))}
-          </dl>
+          <p className="text-xs font-medium tracking-wide text-muted uppercase">Run</p>
+          {summary && <p className="mt-2 text-sm">{summary}</p>}
+          <details className="group mt-3 text-sm">
+            <summary className="cursor-pointer text-xs text-muted select-none hover:text-foreground">Advanced run details</summary>
+            <div className="mt-2 space-y-3">
+              {advanced.map((group, i) => (
+                <dl key={i} className="space-y-1">
+                  {group.map(([k, v]) => (
+                    <div key={k} className="flex justify-between gap-3 text-xs">
+                      <dt className="text-muted">{k}</dt>
+                      <dd className="text-right tabular-nums">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ))}
+            </div>
+          </details>
         </div>
       </div>
     </aside>
@@ -157,26 +176,56 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
   const note = running ? STATUS_NOTES[research.status] : undefined;
 
   const allStories = groupSourcesByStory(sources);
-  // Unscored sources (older research) count as relevant.
-  const stories = allStories.filter((s) => s.primary.is_relevant !== false);
-  const setAside = allStories.filter((s) => s.primary.is_relevant === false);
+  const direct = allStories.filter((s) => storyLabel(s) === "direct");
+  const contextual = allStories.filter((s) => storyLabel(s) === "contextual");
+  const filtered = allStories.filter((s) => storyLabel(s) === "irrelevant");
+  // Citation numbers: direct stories first, then contextual; stable across tabs.
+  const stories = [...direct, ...contextual].map((s, i) => ({ ...s, number: i + 1 }));
+  const numbered = new Map(stories.map((s) => [s.primary.id, s]));
   const relevantSourceCount = stories.reduce((n, s) => n + 1 + s.alsoReported.length, 0);
-  const aiOffTopic = new Set(
-    ((analysis?.report?.metadata as { ai_off_topic_source_ids?: unknown } | null)?.ai_off_topic_source_ids as string[] | undefined) ?? [],
-  );
+  const aiOffTopic = ((analysis?.report?.metadata as { ai_off_topic_source_ids?: unknown } | null)?.ai_off_topic_source_ids as
+    | string[]
+    | undefined) ?? [];
   const citations = citationIndex(stories);
+  const constraints = researchConstraints(research);
   const analysisFailed = events.some((e) => e.stage === "analyzing" && e.level === "warning");
   const hasReport = Boolean(analysis?.report);
 
   const findings = analysis?.findings ?? [];
   const companies = analysis?.companies ?? [];
-  const verified = companies.filter((c) => entityResolution(c)?.status === "resolved").length;
   const funnel: FunnelStep[] = [
     { label: "Results collected", value: resultsCollected(events, sources.length), hint: "Search and news results before any cleanup" },
     { label: "Unique stories", value: allStories.length, hint: "After removing repeated URLs and grouping the same story from different outlets" },
-    { label: "On topic", value: stories.length, hint: "Stories kept by relevance filtering and sent to the AI" },
-    { label: "Companies", value: companies.length, hint: "Organizations the analysis identified in the sources" },
-    { label: "Verified", value: verified, hint: "Companies matched to a Wikidata record with supporting evidence" },
+    { label: "Direct", value: direct.length, hint: "Directly about the question's topic, place and kind of organization" },
+    { label: "Contextual", value: contextual.length, hint: "Useful background, sent to the analysis as context" },
+    { label: "Filtered out", value: filtered.length, hint: "Irrelevant to the question; kept for auditing but not analyzed" },
+  ];
+  const meta = (analysis?.report?.metadata ?? {}) as ReportMeta;
+  const summary = runSummary(research, meta);
+  const evidence = (c: "high" | "medium" | "low") => companies.filter((x) => entityVerification(x)?.confidence === c).length;
+  const advanced: Row[][] = [
+    [
+      ["Created", formatDateTime(research.created_at)],
+      ...(meta.model ? [["Model", meta.model] as Row] : []),
+      ...(meta.input_tokens ? [["Input tokens", meta.input_tokens.toLocaleString("en")] as Row] : []),
+      ...(meta.output_tokens ? [["Output tokens", meta.output_tokens.toLocaleString("en")] as Row] : []),
+    ],
+    [
+      ["Results collected", String(funnel[0].value)],
+      ["Unique stories", String(allStories.length)],
+      ["Direct / contextual / filtered", `${direct.length} / ${contextual.length} / ${filtered.length}`],
+      ...(constraints?.method ? [["Relevance method", constraints.method === "ai" ? "AI classification" : "Keyword matching"] as Row] : []),
+      ...(meta.sources_analyzed ? [["Sources analyzed", String(meta.sources_analyzed)] as Row] : []),
+    ],
+    ...(companies.length
+      ? [
+          [
+            ["Companies", String(companies.length)],
+            ["Evidence high / medium / low", `${evidence("high")} / ${evidence("medium")} / ${evidence("low")}`],
+            ["Matched on Wikidata", String(companies.filter((c) => entityResolution(c)?.status === "resolved").length)],
+          ] as Row[],
+        ]
+      : []),
   ];
   const sections = [
     ...(hasReport
@@ -187,7 +236,7 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
           { id: "trends", title: "Trends", count: findings.filter((f) => f.type === "trend").length },
         ]
       : []),
-    { id: "sources", title: "Sources", count: stories.length || undefined },
+    { id: "sources", title: "Sources", count: allStories.length || undefined },
   ];
 
   return (
@@ -204,7 +253,9 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
           <StatusBadge status={stale ? "failed" : research.status} />
         </div>
         {research.focus && <p className="mt-1 text-muted">{research.focus}</p>}
-        <p className="mt-2 text-xs text-muted lg:hidden">Created {formatDateTime(research.created_at)}</p>
+        <p className="mt-2 text-sm text-muted">
+          {summary ?? `Created ${formatDateTime(research.created_at)}`}
+        </p>
 
         <div className="mt-5">
           {running ? (
@@ -219,7 +270,7 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
             </div>
           ) : (
             // Without a report, company counts would read as "found none".
-            research.status === "completed" && <ResearchFunnel steps={hasReport ? funnel : funnel.slice(0, 3)} />
+            research.status === "completed" && <ResearchFunnel steps={funnel} />
           )}
         </div>
 
@@ -236,7 +287,7 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
           {hasReport && analysis ? (
             <>
               <OverviewSection analysis={analysis} citations={citations} />
-              <CompaniesSection analysis={analysis} citations={citations} />
+              <CompaniesSection analysis={analysis} citations={citations} constraints={constraints} />
               <DevelopmentsSection analysis={analysis} citations={citations} />
               <TrendsSection analysis={analysis} citations={citations} />
             </>
@@ -265,12 +316,12 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
             <SectionHeading
               id="sources"
               title="Sources"
-              count={relevantSourceCount || undefined}
-              hint={stories.length < relevantSourceCount ? `${stories.length} stories; duplicates grouped` : undefined}
+              count={allStories.length || undefined}
+              hint={stories.length < relevantSourceCount ? `${relevantSourceCount} reports in ${stories.length} relevant stories` : undefined}
             />
             <div className="mt-3">
-              {stories.length > 0 ? (
-                <SourceList stories={stories} />
+              {allStories.length > 0 ? (
+                <SourceTabs direct={direct.map((s) => numbered.get(s.primary.id)!)} contextual={contextual.map((s) => numbered.get(s.primary.id)!)} filtered={filtered} aiOffTopic={aiOffTopic} />
               ) : (
                 <EmptyState
                   title={running ? "Collecting sources…" : "No sources"}
@@ -281,7 +332,6 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
                   }
                 />
               )}
-              <SetAsideSources stories={setAside} aiOffTopic={aiOffTopic} />
             </div>
           </section>
 
@@ -297,7 +347,7 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
           )}
         </div>
 
-        <Sidebar research={research} analysis={analysis} sections={sections} />
+        <Sidebar sections={sections} summary={summary} advanced={advanced} />
       </div>
     </div>
   );

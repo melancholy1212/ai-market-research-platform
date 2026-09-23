@@ -1,5 +1,14 @@
+import { ENTITY_TYPE_LABEL, ENTITY_TYPES, rankCompanies, type EntityType } from "@/lib/entities/assess";
 import { formatDate } from "@/lib/format";
-import { entityResolution, entitySourceIds, type Entity, type ResearchAnalysis } from "@/lib/research";
+import {
+  entityResolution,
+  entitySourceIds,
+  entityTypeEvidence,
+  entityVerification,
+  type Entity,
+  type ResearchAnalysis,
+  type ResearchConstraints,
+} from "@/lib/research";
 
 import { Citations, type CitationTarget } from "./citations";
 import { CompaniesTable, type CompanyRow } from "./companies-table";
@@ -59,57 +68,93 @@ const WEBSITE_SOURCE_LABEL = {
   search: "Website from web search (name match)",
 } as const;
 
+const asEntityType = (t: string): EntityType | null => (ENTITY_TYPES.includes(t as EntityType) ? (t as EntityType) : null);
+
 function companyRow(entity: Entity, citations: Map<string, CitationTarget>): CompanyRow {
   const r = entityResolution(entity);
+  const v = entityVerification(entity);
+  const type = asEntityType(entity.entity_type);
   const targets = [
     ...new Map(
       entitySourceIds(entity).flatMap((id) => (citations.has(id) ? [[citations.get(id)!.number, citations.get(id)!]] : [])),
     ).values(),
   ].sort((a, b) => a.number - b.number);
-
-  let identity: CompanyRow["identity"] = { kind: null, href: null, title: "" };
-  if (r?.status === "resolved" && r.wikidataId) {
-    identity = {
-      kind: "verified",
-      href: `https://www.wikidata.org/wiki/${r.wikidataId}`,
-      title: [
-        `Matched to Wikidata ${r.wikidataId}${r.wikidataLabel ? ` (${r.wikidataLabel})` : ""}`,
-        r.wikidataDescription,
-        r.signals.length ? `Evidence: ${r.signals.join(", ")}` : null,
-        r.confidence !== null ? `Confidence ${Math.round(r.confidence * 100)}%` : null,
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    };
-  } else if (r) {
-    identity = {
-      kind: r.status === "ambiguous" ? "ambiguous" : "unverified",
-      href: null,
-      title: r.status === "ambiguous" ? "Several organizations share this name; none was picked." : `Not verified: ${r.reason ?? "no confident match"}`,
-    };
-  }
+  const wikidata = r?.status === "resolved" && r.wikidataId ? r : null;
 
   return {
     id: entity.id,
     name: entity.name,
+    typeLabel: type && type !== "other" ? ENTITY_TYPE_LABEL[type] : null,
+    typeEvidence: entityTypeEvidence(entity),
     country: entity.country,
     focus: entity.description,
     domain: entity.domain,
     websiteLabel: r?.websiteSource ? WEBSITE_SOURCE_LABEL[r.websiteSource] : null,
-    identity,
+    confidence: v?.confidence ?? null,
+    evidence: [
+      v?.signals.length ? `Evidence: ${v.signals.join("; ")}` : null,
+      wikidata ? `Wikidata ${wikidata.wikidataId}${wikidata.wikidataLabel ? ` (${wikidata.wikidataLabel})` : ""}: ${wikidata.wikidataDescription ?? ""}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    wikidataHref: wikidata ? `https://www.wikidata.org/wiki/${wikidata.wikidataId}` : null,
     citations: targets,
   };
 }
 
-export function CompaniesSection({ analysis, citations }: Props) {
-  const { companies } = analysis;
+const PLURAL_TYPE: Record<string, string> = {
+  startup: "Startups",
+  established_company: "Established companies",
+  investor: "Investors",
+  research_institution: "Research institutions",
+};
+
+// Companies ordered for the question: requested entity type, geography,
+// topic, then evidence. When the question asks for a kind of organization
+// (e.g. startups), those lead and everything else is listed as ecosystem.
+export function CompaniesSection({ analysis, citations, constraints }: Props & { constraints: ResearchConstraints | null }) {
+  const ranked = rankCompanies(
+    analysis.companies.map((c) => ({
+      entity: c,
+      name: c.name,
+      entityType: asEntityType(c.entity_type),
+      country: c.country,
+      focus: c.description,
+      confidence: entityVerification(c)?.confidence ?? null,
+      citationCount: entitySourceIds(c).length,
+    })),
+    constraints,
+  );
+  // Entities saved before classification have no type; don't split those.
+  const classified = ranked.some((c) => c.entityType !== null);
+  const wanted = classified && constraints?.entityType && constraints.entityType !== "any" ? constraints.entityType : null;
+  const primary = wanted ? ranked.filter((c) => c.entityType === wanted) : ranked;
+  const ecosystem = wanted ? ranked.filter((c) => c.entityType !== wanted) : [];
+  const title = wanted && primary.length > 0 ? (PLURAL_TYPE[wanted] ?? "Companies") : "Companies";
+
   return (
     <section>
-      <SectionHeading id="companies" title="Companies" count={companies.length} hint="Hover a badge for the matching evidence" />
-      {companies.length === 0 ? (
+      <SectionHeading id="companies" title={title} count={primary.length || analysis.companies.length} hint="Hover a badge for the evidence" />
+      {analysis.companies.length === 0 ? (
         <Muted>No companies were identified in the sources.</Muted>
+      ) : primary.length === 0 ? (
+        <>
+          <p className="mt-2 text-sm text-muted">No {title.toLowerCase()} were identified; these organizations appear in the sources.</p>
+          <CompaniesTable rows={ecosystem.map((c) => companyRow(c.entity, citations))} />
+        </>
       ) : (
-        <CompaniesTable rows={companies.map((c) => companyRow(c, citations))} />
+        <>
+          <CompaniesTable rows={primary.map((c) => companyRow(c.entity, citations))} />
+          {ecosystem.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-sm font-medium">
+                Other organizations in the ecosystem <span className="font-normal text-muted">({ecosystem.length})</span>
+              </h3>
+              <p className="mt-0.5 text-xs text-muted">Relevant to the question but not {title.toLowerCase()}: established companies, investors, partners.</p>
+              <CompaniesTable rows={ecosystem.map((c) => companyRow(c.entity, citations))} />
+            </div>
+          )}
+        </>
       )}
     </section>
   );

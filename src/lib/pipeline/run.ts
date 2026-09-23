@@ -2,7 +2,7 @@ import "server-only";
 
 import { AllProvidersFailedError, generateWithFallback } from "@/lib/ai/fallback";
 import { aiProviders } from "@/lib/ai/providers";
-import { resolveCompanies, type ResolvedCompany, type ResolutionStats } from "@/lib/entities";
+import { resolveCompanies, verifyCompany, type ResolvedCompany, type ResolutionStats } from "@/lib/entities";
 import { ProviderError } from "@/lib/http";
 import { rssSearch } from "@/lib/providers/rss";
 import { tavily } from "@/lib/providers/tavily";
@@ -23,7 +23,15 @@ import {
 import { groupStories, titleTokens } from "./dedup";
 import { mergeCandidates, type MergeInput } from "./merge";
 import { normalizeSources, type NormalizedSource } from "./normalize";
-import { judgeStories, relevanceContext, summarizeReasons, type Relevance } from "./relevance";
+import { classifyWithAI } from "./classify";
+import { judgeStories, relevanceContext, type Relevance } from "./relevance";
+import {
+  fallbackClassification,
+  fallbackConstraints,
+  type QueryConstraints,
+  type RelevanceLabel,
+  type SourceClassification,
+} from "./relevance-ai";
 import { buildSearchPlan, type SearchTask } from "./plan";
 
 const PROVIDERS: Record<string, SearchProvider> = { [tavily.id]: tavily, [rssSearch.id]: rssSearch };
@@ -59,12 +67,15 @@ function analysisPayload(analysis: Analysis, companies: ResolvedCompany[], metad
       return {
         key: `c${i}`,
         name: c.name,
+        entity_type: c.entityType,
         domain,
         country: c.country,
         description: c.focus,
         source_ids: c.sourceIds,
         metadata: {
           names: c.names,
+          type_evidence: c.typeEvidence,
+          verification: c.verification,
           website_source: domain ? c.websiteSource : null,
           resolution: {
             status: c.resolution.status,
@@ -94,25 +105,32 @@ function analysisPayload(analysis: Analysis, companies: ResolvedCompany[], metad
 }
 
 // Companies as extracted, marked unresolved: used when resolution fails.
-function unresolvedCompanies(analysis: Analysis): ResolvedCompany[] {
-  return analysis.companies.map((c) => ({
-    ...c,
-    names: [c.name],
-    websiteSource: c.domain ? "sources" : null,
-    resolution: {
-      status: "unresolved",
-      wikidataId: null,
-      wikidataLabel: null,
-      wikidataDescription: null,
-      confidence: null,
-      signals: [],
-      reason: "resolution unavailable",
-    },
-  }));
+function unresolvedCompanies(analysis: Analysis, sourceUrls: ReadonlyMap<string, string[]>): ResolvedCompany[] {
+  return analysis.companies.map((c) => {
+    const company: ResolvedCompany = {
+      ...c,
+      names: [c.name],
+      websiteSource: c.domain ? "sources" : null,
+      resolution: {
+        status: "unresolved",
+        wikidataId: null,
+        wikidataLabel: null,
+        wikidataDescription: null,
+        confidence: null,
+        signals: [],
+        reason: "resolution unavailable",
+        wikidataCountry: null,
+      },
+      verification: { confidence: "low", signals: [] },
+    };
+    company.verification = verifyCompany(company, sourceUrls);
+    return company;
+  });
 }
 
-function describeResolution(stats: ResolutionStats, total: number): string {
-  const parts = [`${stats.resolved} of ${total} verified against Wikidata`];
+function describeResolution(stats: ResolutionStats, companies: ResolvedCompany[]): string {
+  const by = (c: "high" | "medium" | "low") => companies.filter((x) => x.verification.confidence === c).length;
+  const parts = [`evidence ${by("high")} high, ${by("medium")} medium, ${by("low")} low`, `${stats.resolved} matched on Wikidata`];
   if (stats.merged) parts.push(`${plural(stats.merged, "duplicate")} merged`);
   const websites = stats.websites.sources + stats.websites.wikidata + stats.websites.clearbit + stats.websites.search;
   if (websites) {
@@ -254,84 +272,8 @@ export async function runResearch(researchId: string): Promise<void> {
     const ordered = [...normalized.sources].sort(primaryFirst);
     const groups = groupStories(ordered, titleTokens(`${research.query} ${research.focus ?? ""}`));
 
-    // Relevance: score every source; a story is kept or set aside as a whole.
-    const judged = judgeStories(
-      groups.map((g) =>
-        [g.primary, ...g.duplicates.map((d) => d.source)].map((s) => ({
-          title: s.title,
-          snippet: s.snippet,
-          url: s.url,
-          publishedAt: s.publishedAt,
-          foundByCount: s.foundBy.length,
-        })),
-      ),
-      relevanceContext(research),
-    );
-
-    const row = (
-      s: NormalizedSource,
-      relevance: { own: Relevance; storyRelevant: boolean; promoted: boolean },
-      extra: { duplicate_of?: string; dedup?: Json } = {},
-    ) => ({
-      research_id: researchId,
-      url: s.url,
-      canonical_url: s.canonicalUrl,
-      title: s.title,
-      publisher: s.publisher,
-      published_at: s.publishedAt,
-      source_type: s.type,
-      extracted_text: s.snippet,
-      duplicate_of: extra.duplicate_of ?? null,
-      relevance_score: relevance.own.score,
-      is_relevant: relevance.storyRelevant,
-      metadata: {
-        found_by: s.foundBy,
-        relevance: {
-          reasons: relevance.own.reasons,
-          ...(relevance.promoted ? { promoted: true } : {}),
-        },
-        ...(s.titleTruncated ? { title_truncated: true } : {}),
-        ...(extra.dedup ? { dedup: extra.dedup } : {}),
-      },
-    });
-
-    // Primaries first, so duplicates can reference their ids.
-    const primaryIds = new Map<string, string>();
-    if (groups.length > 0) {
-      const { data: inserted, error: insertError } = await supabase
-        .from("sources")
-        .upsert(
-          groups.map((g, i) =>
-            row(g.primary, { own: judged[i].members[0], storyRelevant: judged[i].relevant, promoted: judged[i].promoted }),
-          ),
-          { onConflict: "research_id,canonical_url", ignoreDuplicates: true },
-        )
-        .select("id, canonical_url");
-      if (insertError) throw new Error(`saving sources failed: ${insertError.message}`);
-      for (const r of inserted) primaryIds.set(r.canonical_url, r.id);
-    }
-
-    const duplicateRows = groups.flatMap((g, i) => {
-      const primaryId = primaryIds.get(g.primary.canonicalUrl);
-      return primaryId
-        ? g.duplicates.map((d, j) =>
-            row(
-              d.source,
-              { own: judged[i].members[j + 1], storyRelevant: judged[i].relevant, promoted: judged[i].promoted },
-              { duplicate_of: primaryId, dedup: { reason: d.match.reason, similarity: d.match.similarity } },
-            ),
-          )
-        : [];
-    });
-    if (duplicateRows.length > 0) {
-      const { error: dupError } = await supabase
-        .from("sources")
-        .upsert(duplicateRows, { onConflict: "research_id,canonical_url", ignoreDuplicates: true });
-      if (dupError) throw new Error(`saving duplicate sources failed: ${dupError.message}`);
-    }
-
     const total = normalized.sources.length;
-    const grouped = duplicateRows.length;
+    const grouped = groups.reduce((n, g) => n + g.duplicates.length, 0);
     const removed = [
       merged.stats.duplicates && plural(merged.stats.duplicates, "repeated URL"),
       merged.stats.invalidUrls && plural(merged.stats.invalidUrls, "unusable URL"),
@@ -355,39 +297,164 @@ export async function runResearch(researchId: string): Promise<void> {
       );
     }
 
-    const relevantCount = judged.filter((j) => j.relevant).length;
+    // Relevance: every story is classified direct, contextual or irrelevant
+    // against the question's constraints, by the AI in batches. The keyword
+    // scorer covers anything the AI could not classify (and everything when
+    // no AI is available), so a failure here never loses the run.
+    const providers = aiProviders().filter((p) => p.isConfigured());
+    const keywordContext = relevanceContext(research);
+    const judged = judgeStories(
+      groups.map((g) =>
+        [g.primary, ...g.duplicates.map((d) => d.source)].map((s) => ({
+          title: s.title,
+          snippet: s.snippet,
+          url: s.url,
+          publishedAt: s.publishedAt,
+          foundByCount: s.foundBy.length,
+        })),
+      ),
+      keywordContext,
+    );
+    const storyClass: SourceClassification[] = judged.map((j) =>
+      fallbackClassification({ score: j.score, relevant: j.relevant, reasons: j.members[0].reasons }),
+    );
+    let constraints: QueryConstraints = fallbackConstraints(research, keywordContext);
+    let aiClassified = 0;
     if (groups.length > 0) {
-      const setAside = groups.length - relevantCount;
-      const promoted = judged.filter((j) => j.promoted).length;
+      await log("processing", `Filtering ${plural(groups.length, "source")} for relevance…`);
+      if (providers.length > 0) {
+        const ai = await classifyWithAI(
+          research,
+          groups.map((g, i) => ({
+            id: String(i),
+            title: g.primary.title,
+            url: g.primary.url,
+            publisher: g.primary.publisher,
+            publishedAt: g.primary.publishedAt,
+            snippet: g.primary.snippet,
+          })),
+          providers,
+        );
+        if (ai.constraints) constraints = ai.constraints;
+        groups.forEach((_, i) => {
+          const c = ai.classifications.get(String(i));
+          if (c) {
+            storyClass[i] = c;
+            aiClassified++;
+          }
+        });
+        if (aiClassified < groups.length) {
+          await log(
+            "processing",
+            `AI relevance filtering covered ${aiClassified} of ${groups.length} sources; the rest were judged by keyword matching.`,
+            "warning",
+            { batches: ai.batches, failedBatches: ai.failedBatches },
+          );
+        }
+      }
+    }
+    const { error: constraintsError } = await supabase
+      .from("researches")
+      .update({ constraints: { ...constraints, method: aiClassified > 0 ? "ai" : "keyword" } })
+      .eq("id", researchId);
+    if (constraintsError) console.warn(`runResearch ${researchId}: constraints not saved`, constraintsError.message);
+
+    const row = (
+      s: NormalizedSource,
+      relevance: { own: Relevance; story: SourceClassification },
+      extra: { duplicate_of?: string; dedup?: Json } = {},
+    ) => ({
+      research_id: researchId,
+      url: s.url,
+      canonical_url: s.canonicalUrl,
+      title: s.title,
+      publisher: s.publisher,
+      published_at: s.publishedAt,
+      source_type: s.type,
+      extracted_text: s.snippet,
+      duplicate_of: extra.duplicate_of ?? null,
+      // Duplicates share their story's classification.
+      relevance_label: relevance.story.label,
+      relevance_score: relevance.story.score,
+      relevance_reason: relevance.story.reason,
+      is_relevant: relevance.story.label !== "irrelevant",
+      metadata: {
+        found_by: s.foundBy,
+        relevance: { keyword_score: relevance.own.score, reasons: relevance.own.reasons },
+        ...(s.titleTruncated ? { title_truncated: true } : {}),
+        ...(extra.dedup ? { dedup: extra.dedup } : {}),
+      },
+    });
+
+    // Primaries first, so duplicates can reference their ids.
+    const primaryIds = new Map<string, string>();
+    if (groups.length > 0) {
+      const { data: inserted, error: insertError } = await supabase
+        .from("sources")
+        .upsert(
+          groups.map((g, i) =>
+            row(g.primary, { own: judged[i].members[0], story: storyClass[i] }),
+          ),
+          { onConflict: "research_id,canonical_url", ignoreDuplicates: true },
+        )
+        .select("id, canonical_url");
+      if (insertError) throw new Error(`saving sources failed: ${insertError.message}`);
+      for (const r of inserted) primaryIds.set(r.canonical_url, r.id);
+    }
+
+    const duplicateRows = groups.flatMap((g, i) => {
+      const primaryId = primaryIds.get(g.primary.canonicalUrl);
+      return primaryId
+        ? g.duplicates.map((d, j) =>
+            row(
+              d.source,
+              { own: judged[i].members[j + 1], story: storyClass[i] },
+              { duplicate_of: primaryId, dedup: { reason: d.match.reason, similarity: d.match.similarity } },
+            ),
+          )
+        : [];
+    });
+    if (duplicateRows.length > 0) {
+      const { error: dupError } = await supabase
+        .from("sources")
+        .upsert(duplicateRows, { onConflict: "research_id,canonical_url", ignoreDuplicates: true });
+      if (dupError) throw new Error(`saving duplicate sources failed: ${dupError.message}`);
+    }
+
+    if (groups.length > 0) {
+      const count = (l: RelevanceLabel) => storyClass.filter((c) => c.label === l).length;
       await log(
         "processing",
-        `Relevance: ${relevantCount} of ${plural(groups.length, "story", "stories")} are on topic` +
-          (setAside ? `; set aside ${setAside} (${summarizeReasons(judged)})` : "") +
-          (promoted ? `. ${plural(promoted, "weaker match")} kept so the question stays covered` : "") +
-          ".",
+        `Relevance filtering complete: ${count("direct")} direct, ${count("contextual")} contextual, ${count("irrelevant")} irrelevant` +
+          (aiClassified === 0 ? " (keyword matching; AI unavailable)." : "."),
         "info",
-        { relevant: relevantCount, setAside, promoted },
+        { direct: count("direct"), contextual: count("contextual"), irrelevant: count("irrelevant"), method: aiClassified > 0 ? "ai" : "keyword" },
       );
     }
 
-    // Analyzing: one AI call over the relevant story primaries, best first,
-    // so a small prompt budget gets the most on-topic sources.
-    const analysisSources: AnalysisSource[] = groups
-      .map((g, i) => ({ g, j: judged[i], i }))
-      .filter(({ g, j }) => j.relevant && primaryIds.has(g.primary.canonicalUrl))
-      .sort((a, b) => b.j.score - a.j.score || a.i - b.i)
-      .map(({ g }) => g)
-      .slice(0, LIMITS.sources)
-      .map((g) => ({
-        id: primaryIds.get(g.primary.canonicalUrl)!,
-        title: g.primary.title,
-        url: g.primary.url,
-        publisher: g.primary.publisher,
-        publishedAt: g.primary.publishedAt,
-        snippet: g.primary.snippet,
-        alsoReportedBy: g.duplicates.length,
-      }));
-    const providers = aiProviders().filter((p) => p.isConfigured());
+    // Analyzing: one AI call over direct and contextual stories (never
+    // irrelevant ones), direct first and best first, so a small prompt
+    // budget gets the most useful sources.
+    const LABEL_ORDER: Record<RelevanceLabel, number> = { direct: 0, contextual: 1, irrelevant: 2 };
+    const analysisGroups = groups
+      .map((g, i) => ({ g, c: storyClass[i], i }))
+      .filter(({ g, c }) => c.label !== "irrelevant" && primaryIds.has(g.primary.canonicalUrl))
+      .sort((a, b) => LABEL_ORDER[a.c.label] - LABEL_ORDER[b.c.label] || b.c.score - a.c.score || a.i - b.i)
+      .slice(0, LIMITS.sources);
+    const analysisSources: AnalysisSource[] = analysisGroups.map(({ g, c }) => ({
+      id: primaryIds.get(g.primary.canonicalUrl)!,
+      title: g.primary.title,
+      url: g.primary.url,
+      publisher: g.primary.publisher,
+      publishedAt: g.primary.publishedAt,
+      snippet: g.primary.snippet,
+      alsoReportedBy: g.duplicates.length,
+      label: c.label === "direct" ? "direct" : "contextual",
+    }));
+    // Every outlet behind each analyzed story, for verification confidence.
+    const storyUrls = new Map(
+      analysisGroups.map(({ g }) => [primaryIds.get(g.primary.canonicalUrl)!, [g.primary.url, ...g.duplicates.map((d) => d.source.url)]]),
+    );
 
     if (analysisSources.length === 0) {
       await log("analyzing", "No sources to analyze.", "warning");
@@ -395,7 +462,7 @@ export async function runResearch(researchId: string): Promise<void> {
       await log("analyzing", "No AI provider is configured on this deployment, so the sources were not analyzed.", "warning");
     } else {
       await setStatus("analyzing");
-      await log("analyzing", `Analyzing ${plural(analysisSources.length, "source")} with AI.`);
+      await log("analyzing", `Analyzing ${plural(analysisSources.length, "relevant source")} with AI…`);
       try {
         let sourcesAnalyzed = 0;
         const result = await generateWithFallback(providers, (provider) => {
@@ -440,17 +507,20 @@ export async function runResearch(researchId: string): Promise<void> {
         if (analysis.companies.length > 0) {
           await setStatus("resolving");
           try {
-            ({ companies, stats: resolution } = await resolveCompanies(analysis.companies, `${research.query} ${research.focus ?? ""}`));
-            await log("resolving", describeResolution(resolution, companies.length), "info", resolution);
+            ({ companies, stats: resolution } = await resolveCompanies(analysis.companies, `${research.query} ${research.focus ?? ""}`, storyUrls));
+            await log("resolving", describeResolution(resolution, companies), "info", resolution);
             if (resolution.searchUnavailable) {
               await log("resolving", "Web search for company websites was unavailable; some websites may be missing.", "warning");
+            }
+            if (resolution.skippedForTime) {
+              await log("resolving", `Website lookup ran out of time; ${plural(resolution.skippedForTime, "company", "companies")} may be missing a website.`, "warning");
             }
             if (resolution.wikidataErrors) {
               await log("resolving", "Some Wikidata lookups failed; those companies stay unverified.", "warning");
             }
           } catch (error) {
             console.error(`runResearch ${researchId}: entity resolution failed`, error);
-            companies = unresolvedCompanies(analysis);
+            companies = unresolvedCompanies(analysis, storyUrls);
             await log("resolving", "Company verification failed; companies are shown unverified.", "warning");
           }
         } else {
@@ -464,33 +534,12 @@ export async function runResearch(researchId: string): Promise<void> {
           sources_analyzed: sourcesAnalyzed,
           validation,
           resolution,
-          ai_off_topic_source_ids: analysis.offTopicSourceIds,
         };
         const { error: saveError } = await supabase
           .rpc("save_research_analysis", { p_research_id: researchId, p_analysis: analysisPayload(analysis, companies, metadata) })
           // The function refuses a second save, so retrying is safe.
           .setHeader(RETRY_SAFE_HEADER, "1");
         if (saveError) throw new Error(`saving analysis failed: ${saveError.message}`);
-
-        // The AI's second opinion on relevance: set aside the stories it
-        // judged off-topic (primaries and their duplicates). Best effort.
-        if (analysis.offTopicSourceIds.length > 0) {
-          const ids = analysis.offTopicSourceIds.join(",");
-          const { error: flagError } = await supabase
-            .from("sources")
-            .update({ is_relevant: false })
-            .eq("research_id", researchId)
-            .or(`id.in.(${ids}),duplicate_of.in.(${ids})`);
-          if (flagError) console.warn(`runResearch ${researchId}: could not flag off-topic sources`, flagError.message);
-          else {
-            await log(
-              "analyzing",
-              `The AI set aside ${plural(analysis.offTopicSourceIds.length, "more source")} as off-topic.`,
-              "info",
-              { off_topic_source_ids: analysis.offTopicSourceIds },
-            );
-          }
-        }
       } catch (error) {
         // Analysis failing must not throw away the collected sources: the
         // research still completes, and the log says why there is no report.

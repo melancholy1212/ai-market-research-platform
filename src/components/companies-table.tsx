@@ -7,35 +7,46 @@ import type { CitationTarget } from "./citations";
 export type CompanyRow = {
   id: string;
   name: string;
+  typeLabel: string | null;
+  typeEvidence: string | null;
   country: string | null;
   focus: string | null;
   domain: string | null;
   websiteLabel: string | null; // where the website came from
-  identity: { kind: "verified" | "ambiguous" | "unverified" | null; href: string | null; title: string };
+  confidence: "high" | "medium" | "low" | null;
+  evidence: string; // tooltip: the signals behind the confidence
+  wikidataHref: string | null;
   citations: CitationTarget[];
 };
 
-type Sort = "cited" | "name" | "country";
+type Sort = "relevance" | "name" | "country";
 
-function IdentityBadge({ identity }: { identity: CompanyRow["identity"] }) {
-  if (!identity.kind) return null;
-  if (identity.kind === "verified" && identity.href) {
-    return (
-      <a
-        href={identity.href}
-        target="_blank"
-        rel="noopener noreferrer"
-        title={identity.title}
-        className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 hover:underline dark:text-emerald-300"
-      >
-        Wikidata ✓
-      </a>
-    );
-  }
+const CONFIDENCE_STYLE = {
+  high: { label: "High evidence", className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+  medium: { label: "Medium evidence", className: "bg-sky-500/10 text-sky-700 dark:text-sky-300" },
+  low: { label: "Low evidence", className: "bg-surface-muted text-muted" },
+} as const;
+
+function IdentityBadges({ row }: { row: CompanyRow }) {
   return (
-    <span title={identity.title} className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-muted">
-      {identity.kind === "ambiguous" ? "Ambiguous" : "Unverified"}
-    </span>
+    <>
+      {row.confidence && (
+        <span title={row.evidence} className={`cursor-help rounded px-1.5 py-0.5 text-[10px] font-medium ${CONFIDENCE_STYLE[row.confidence].className}`}>
+          {CONFIDENCE_STYLE[row.confidence].label}
+        </span>
+      )}
+      {row.wikidataHref && (
+        <a
+          href={row.wikidataHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Matched to a Wikidata record"
+          className="rounded border border-border px-1 py-0.5 text-[10px] text-muted hover:text-accent"
+        >
+          Wikidata
+        </a>
+      )}
+    </>
   );
 }
 
@@ -60,27 +71,26 @@ function CitationChips({ targets }: { targets: CitationTarget[] }) {
 // server; this only filters and orders them.
 export function CompaniesTable({ rows }: { rows: CompanyRow[] }) {
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<Sort>("cited");
-  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [sort, setSort] = useState<Sort>("relevance");
+  const [strongOnly, setStrongOnly] = useState(false);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = rows.filter(
       (r) =>
-        (!verifiedOnly || r.identity.kind === "verified") &&
+        (!strongOnly || r.confidence === "high") &&
         (!q || [r.name, r.country, r.focus, r.domain].some((f) => f?.toLowerCase().includes(q))),
     );
+    // "relevance" keeps the server's order (requested type, geography,
+    // topic, then evidence).
+    if (sort === "relevance") return filtered;
     const by = (f: (r: CompanyRow) => string) => (a: CompanyRow, b: CompanyRow) => f(a).localeCompare(f(b));
     return [...filtered].sort(
-      sort === "name"
-        ? by((r) => r.name)
-        : sort === "country"
-          ? (a, b) => by((r) => r.country ?? "￿")(a, b) || by((r) => r.name)(a, b)
-          : (a, b) => b.citations.length - a.citations.length || by((r) => r.name)(a, b),
+      sort === "name" ? by((r) => r.name) : (a, b) => by((r) => r.country ?? "￿")(a, b) || by((r) => r.name)(a, b),
     );
-  }, [rows, query, sort, verifiedOnly]);
+  }, [rows, query, sort, strongOnly]);
 
-  const verifiedCount = rows.filter((r) => r.identity.kind === "verified").length;
+  const strongCount = rows.filter((r) => r.confidence === "high").length;
 
   return (
     <div className="mt-3 overflow-hidden rounded-lg border border-border bg-surface">
@@ -99,14 +109,14 @@ export function CompaniesTable({ rows }: { rows: CompanyRow[] }) {
           aria-label="Sort companies"
           className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
         >
-          <option value="cited">Most cited</option>
+          <option value="relevance">Best match</option>
           <option value="name">Name</option>
           <option value="country">Country</option>
         </select>
-        {verifiedCount > 0 && (
+        {strongCount > 0 && strongCount < rows.length && (
           <label className="flex items-center gap-1.5 text-sm text-muted">
-            <input type="checkbox" checked={verifiedOnly} onChange={(e) => setVerifiedOnly(e.target.checked)} className="accent-[var(--accent)]" />
-            Verified only ({verifiedCount})
+            <input type="checkbox" checked={strongOnly} onChange={(e) => setStrongOnly(e.target.checked)} className="accent-[var(--accent)]" />
+            High evidence only ({strongCount})
           </label>
         )}
       </div>
@@ -121,9 +131,9 @@ export function CompaniesTable({ rows }: { rows: CompanyRow[] }) {
               <li key={r.id} className="px-4 py-3">
                 <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                   <span className="font-medium">{r.name}</span>
-                  <IdentityBadge identity={r.identity} />
+                  <IdentityBadges row={r} />
                 </p>
-                <p className="mt-0.5 text-sm text-muted">{[r.country, r.focus].filter(Boolean).join(" · ") || "—"}</p>
+                <p className="mt-0.5 text-sm text-muted">{[r.typeLabel, r.country, r.focus].filter(Boolean).join(" · ") || "—"}</p>
                 <p className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-sm">
                   {r.domain ? (
                     <a href={`https://${r.domain}`} target="_blank" rel="noopener noreferrer" title={r.websiteLabel ?? undefined} className="text-accent hover:underline">
@@ -154,8 +164,13 @@ export function CompaniesTable({ rows }: { rows: CompanyRow[] }) {
                     <td className="px-4 py-2.5">
                       <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                         <span className="font-medium">{r.name}</span>
-                        <IdentityBadge identity={r.identity} />
+                        <IdentityBadges row={r} />
                       </span>
+                      {r.typeLabel && (
+                        <span className="mt-0.5 block text-xs text-muted" title={r.typeEvidence ?? undefined}>
+                          {r.typeLabel}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 whitespace-nowrap text-muted">{r.country ?? "—"}</td>
                     <td className="px-4 py-2.5 text-muted">{r.focus ?? "—"}</td>
