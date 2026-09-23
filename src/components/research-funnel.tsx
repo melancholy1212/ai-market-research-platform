@@ -4,7 +4,7 @@ export type FunnelStep = { label: string; value: number; hint: string };
 export function ResearchFunnel({ steps }: { steps: FunnelStep[] }) {
   return (
     <dl
-      className={`grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border ${steps.length === 5 ? "sm:grid-cols-5" : "sm:grid-cols-3"}`}
+      className={`grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border ${steps.length === 5 ? "sm:grid-cols-5" : steps.length === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}
     >
       {steps.map((step, i) => (
         <div

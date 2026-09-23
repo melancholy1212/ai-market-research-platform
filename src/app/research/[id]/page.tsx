@@ -179,8 +179,10 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
   const direct = allStories.filter((s) => storyLabel(s) === "direct");
   const contextual = allStories.filter((s) => storyLabel(s) === "contextual");
   const filtered = allStories.filter((s) => storyLabel(s) === "irrelevant");
-  // Citation numbers: direct stories first, then contextual; stable across tabs.
-  const stories = [...direct, ...contextual].map((s, i) => ({ ...s, number: i + 1 }));
+  // Collected before relevance classification: shown as not classified.
+  const unclassified = allStories.filter((s) => storyLabel(s) === "unclassified");
+  // Citation numbers: direct, contextual, then unclassified; stable across tabs.
+  const stories = [...direct, ...contextual, ...unclassified].map((s, i) => ({ ...s, number: i + 1 }));
   const numbered = new Map(stories.map((s) => [s.primary.id, s]));
   const relevantSourceCount = stories.reduce((n, s) => n + 1 + s.alsoReported.length, 0);
   const aiOffTopic = ((analysis?.report?.metadata as { ai_off_topic_source_ids?: unknown } | null)?.ai_off_topic_source_ids as
@@ -196,8 +198,12 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
   const funnel: FunnelStep[] = [
     { label: "Results collected", value: resultsCollected(events, sources.length), hint: "Search and news results before any cleanup" },
     { label: "Unique stories", value: allStories.length, hint: "After removing repeated URLs and grouping the same story from different outlets" },
-    { label: "Direct", value: direct.length, hint: "Directly about the question's topic, place and kind of organization" },
-    { label: "Contextual", value: contextual.length, hint: "Useful background, sent to the analysis as context" },
+    ...(unclassified.length
+      ? [{ label: "Not classified", value: unclassified.length, hint: "Collected before relevance classification existed" }]
+      : [
+          { label: "Direct", value: direct.length, hint: "Directly about the question's topic, place and kind of organization" },
+          { label: "Contextual", value: contextual.length, hint: "Useful background, sent to the analysis as context" },
+        ]),
     { label: "Filtered out", value: filtered.length, hint: "Irrelevant to the question; kept for auditing but not analyzed" },
   ];
   const meta = (analysis?.report?.metadata ?? {}) as ReportMeta;
@@ -214,6 +220,7 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
       ["Results collected", String(funnel[0].value)],
       ["Unique stories", String(allStories.length)],
       ["Direct / contextual / filtered", `${direct.length} / ${contextual.length} / ${filtered.length}`],
+      ...(unclassified.length ? [["Not classified (legacy)", String(unclassified.length)] as Row] : []),
       ...(constraints?.method ? [["Relevance method", constraints.method === "ai" ? "AI classification" : "Keyword matching"] as Row] : []),
       ...(meta.sources_analyzed ? [["Sources analyzed", String(meta.sources_analyzed)] as Row] : []),
     ],
@@ -321,7 +328,13 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
             />
             <div className="mt-3">
               {allStories.length > 0 ? (
-                <SourceTabs direct={direct.map((s) => numbered.get(s.primary.id)!)} contextual={contextual.map((s) => numbered.get(s.primary.id)!)} filtered={filtered} aiOffTopic={aiOffTopic} />
+                <SourceTabs
+                  direct={direct.map((s) => numbered.get(s.primary.id)!)}
+                  contextual={contextual.map((s) => numbered.get(s.primary.id)!)}
+                  unclassified={unclassified.map((s) => numbered.get(s.primary.id)!)}
+                  filtered={filtered}
+                  aiOffTopic={aiOffTopic}
+                />
               ) : (
                 <EmptyState
                   title={running ? "Collecting sources…" : "No sources"}

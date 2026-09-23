@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/format";
+import { displayRelevance, type DisplayRelevance } from "@/lib/relevance-label";
 import type { Source } from "@/lib/research";
 
 const TYPE_LABEL: Record<string, string> = { news: "News", web: "Web" };
@@ -10,11 +11,8 @@ function foundByCount(source: Source): number {
 
 export type Story = { primary: Source; alsoReported: Source[]; number?: number };
 
-export type StoryLabel = "direct" | "contextual" | "irrelevant";
-
-// Older research has no label: fall back to the relevant flag.
-export function storyLabel(story: Story): StoryLabel {
-  return story.primary.relevance_label ?? (story.primary.is_relevant === false ? "irrelevant" : "direct");
+export function storyLabel(story: Story): DisplayRelevance {
+  return displayRelevance(story.primary);
 }
 
 // Groups sources by story: each primary with the duplicates that point at it.
@@ -37,7 +35,7 @@ export function SourceList({ stories }: { stories: Story[] }) {
     <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
       {stories.map(({ primary, alsoReported, number }, i) => {
         const hits = foundByCount(primary);
-        const label = primary.relevance_label;
+        const label = displayRelevance(primary);
         return (
           <li
             key={primary.id}
@@ -63,6 +61,14 @@ export function SourceList({ stories }: { stories: Story[] }) {
                 {hits > 1 && <span>Found by {hits} searches</span>}
                 {label === "contextual" && (
                   <span className="rounded bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-700 dark:text-amber-300">Context</span>
+                )}
+                {label === "unclassified" && (
+                  <span
+                    title="Collected before relevance classification existed"
+                    className="rounded border border-border px-1.5 py-0.5 font-medium"
+                  >
+                    Not classified
+                  </span>
                 )}
               </p>
               {primary.relevance_reason && <p className="mt-1 text-xs text-muted italic">{primary.relevance_reason}</p>}

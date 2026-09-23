@@ -4,30 +4,42 @@ import { useState } from "react";
 
 import { SetAsideSources, SourceList, type Story } from "./source-list";
 
-type Tab = "all" | "direct" | "contextual" | "filtered";
+type Tab = "all" | "direct" | "contextual" | "unclassified" | "filtered";
 
 // Relevance tabs over the source list. Citation numbers belong to the
 // stories, so they stay the same whichever tab is open.
 export function SourceTabs({
   direct,
   contextual,
+  unclassified = [],
   filtered,
   aiOffTopic,
 }: {
   direct: Story[];
   contextual: Story[];
+  // Sources from research collected before relevance classification.
+  unclassified?: Story[];
   filtered: Story[];
   aiOffTopic: string[];
 }) {
   const [tab, setTab] = useState<Tab>("all");
   const offTopic = new Set(aiOffTopic);
   const tabs: { id: Tab; label: string; count: number }[] = [
-    { id: "all", label: "All", count: direct.length + contextual.length + filtered.length },
+    { id: "all", label: "All", count: direct.length + contextual.length + unclassified.length + filtered.length },
     { id: "direct", label: "Direct", count: direct.length },
     { id: "contextual", label: "Contextual", count: contextual.length },
+    // Only research collected before classification has these.
+    ...(unclassified.length ? [{ id: "unclassified" as const, label: "Not classified", count: unclassified.length }] : []),
     { id: "filtered", label: "Filtered out", count: filtered.length },
   ];
-  const shown = tab === "direct" ? direct : tab === "contextual" ? contextual : [...direct, ...contextual];
+  const shown =
+    tab === "direct"
+      ? direct
+      : tab === "contextual"
+        ? contextual
+        : tab === "unclassified"
+          ? unclassified
+          : [...direct, ...contextual, ...unclassified];
 
   return (
     <div>
