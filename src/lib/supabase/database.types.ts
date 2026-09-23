@@ -18,6 +18,7 @@ export type ResearchStatus =
   | "collecting"
   | "processing"
   | "analyzing"
+  | "resolving"
   | "completed"
   | "failed";
 

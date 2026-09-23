@@ -133,6 +133,48 @@ minute, so its prompt keeps the most informative sources that fit (typically
 ~30 of 60), with shorter snippets. If every provider fails, the research still
 completes with its sources and the log says why there is no analysis.
 
+## Entity resolution
+
+Companies extracted by the AI are resolved to real organizations before the
+analysis is saved. A company name alone is never treated as an identity.
+
+1. **Wikidata candidates.** One full-text search per company, restricted to
+   organization classes (a plain label search for "CRED" ranks "credit card"
+   and a town in Devon first), with a label search as fallback. Candidates and
+   their countries are then fetched in batches. Everything is cached for 30
+   days and shared across research runs.
+2. **Scoring.** A candidate must match the name (with or without corporate
+   suffixes) and be an organization. Evidence then adds up: its country
+   matches the sources (**a mismatch disqualifies**), its website matches a
+   domain seen in the sources (strongest signal; a different website counts
+   against), its description fits the research. It is accepted only with
+   enough evidence **and** a clear lead over the next candidate; otherwise
+   the company stays *unresolved* or *ambiguous*. Real cases from the test
+   data: India's Xflow is not merged with Denmark's XFlow, an Indian "Navi"
+   is not matched to a Hungarian NAVI, and CRED resolves to the Indian
+   company rather than a same-named US one.
+3. **Merging.** Extracted companies that resolve to the same Wikidata item or
+   domain are merged ("Cred" and "CRED"), with their citations combined.
+4. **Websites**, in order of trust: a domain from the sources, the Wikidata
+   website of a resolved company, then a DuckDuckGo search. A search result
+   counts only if its domain matches the company name (`cred.club` for CRED,
+   `xflowpay.com` for Xflow; `credit-suisse.com` is not "Cred"), and
+   aggregators like LinkedIn or Crunchbase never count.
+
+**Keeping DuckDuckGo requests low.** DuckDuckGo blocks fast (during development
+it served a bot check after about three requests), so: it is used only for
+companies with no website from the sources or Wikidata; stored answers,
+including "nothing found", are cached for three weeks and read before any
+live lookup; live lookups are capped at 3 per research (most-cited companies
+first), serialized and spaced 5 seconds apart; and the first block page trips
+a circuit breaker stored in the database that pauses lookups for 30 minutes
+across all runs, scoped per environment so a blocked development machine does
+not pause production.
+
+The companies table shows a **Wikidata** badge (with the matching evidence)
+for resolved companies and **Unverified**/**Ambiguous** otherwise, and where
+each website came from.
+
 **Caching**: raw provider responses are cached in Postgres
 (`provider_cache`) keyed by a hash of the request, for 24h (web) or 6h
 (news). Feeds are validated before caching, so a blocked or HTML response
@@ -158,6 +200,7 @@ src/
     pipeline/           run orchestration, search plan, merge, normalize, dedup
     providers/          Tavily and news-site (RSS) search, provider cache
     ai/                 Gemini and Groq clients, fallback chain
+    entities/           Wikidata + DuckDuckGo entity resolution
     http.ts             timeouts, retries, typed provider errors
     url.ts              URL normalization
     supabase/           server-only Supabase client + database types
@@ -231,9 +274,9 @@ npm run build
 2. ~~Research creation and persistence~~
 3. ~~Source discovery and ingestion~~
 4. ~~Normalization and deduplication~~
-5. Entity resolution
+5. ~~Entity resolution~~
 6. Relevance filtering
-7. AI analysis
-8. Source-backed report generation
+7. ~~AI analysis~~
+8. ~~Source-backed report generation~~
 9. Dashboard polish
 10. Deployment, testing and documentation

@@ -1,5 +1,5 @@
 import { formatDate } from "@/lib/format";
-import { entitySourceIds, type ResearchAnalysis } from "@/lib/research";
+import { entityResolution, entitySourceIds, type Entity, type ResearchAnalysis } from "@/lib/research";
 
 import { Citations, type CitationTarget } from "./citations";
 
@@ -50,6 +50,42 @@ export function OverviewSection({ analysis, citations }: Props) {
   );
 }
 
+const WEBSITE_SOURCE_LABEL = { sources: "from the sources", wikidata: "from Wikidata", search: "from web search" } as const;
+
+function IdentityBadge({ entity }: { entity: Entity }) {
+  const r = entityResolution(entity);
+  if (!r) return null;
+  if (r.status === "resolved" && r.wikidataId) {
+    const title = [
+      `Matched to Wikidata ${r.wikidataId}${r.wikidataLabel ? ` (${r.wikidataLabel})` : ""}`,
+      r.wikidataDescription,
+      r.signals.length ? `Evidence: ${r.signals.join(", ")}` : null,
+      r.confidence !== null ? `Confidence ${Math.round(r.confidence * 100)}%` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return (
+      <a
+        href={`https://www.wikidata.org/wiki/${r.wikidataId}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={title}
+        className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 hover:underline dark:text-emerald-300"
+      >
+        Wikidata
+      </a>
+    );
+  }
+  return (
+    <span
+      title={r.status === "ambiguous" ? "Several organizations share this name; none was picked." : `Not verified: ${r.reason ?? "no confident match"}`}
+      className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-muted"
+    >
+      {r.status === "ambiguous" ? "Ambiguous" : "Unverified"}
+    </span>
+  );
+}
+
 export function CompaniesSection({ analysis, citations }: Props) {
   const { companies } = analysis;
   return (
@@ -70,25 +106,39 @@ export function CompaniesSection({ analysis, citations }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {companies.map((c) => (
-                <tr key={c.id}>
-                  <td className="px-4 py-2.5 font-medium">{c.name}</td>
-                  <td className="px-4 py-2.5 text-muted">{c.country ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-muted">{c.description ?? "—"}</td>
-                  <td className="px-4 py-2.5">
-                    {c.domain ? (
-                      <a href={`https://${c.domain}`} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
-                        {c.domain}
-                      </a>
-                    ) : (
-                      <span className="text-muted">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <Citations ids={entitySourceIds(c)} index={citations} />
-                  </td>
-                </tr>
-              ))}
+              {companies.map((c) => {
+                const websiteSource = entityResolution(c)?.websiteSource;
+                return (
+                  <tr key={c.id}>
+                    <td className="px-4 py-2.5">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-medium">{c.name}</span>
+                        <IdentityBadge entity={c} />
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-muted">{c.country ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-muted">{c.description ?? "—"}</td>
+                    <td className="px-4 py-2.5">
+                      {c.domain ? (
+                        <a
+                          href={`https://${c.domain}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={websiteSource ? `Website ${WEBSITE_SOURCE_LABEL[websiteSource]}` : undefined}
+                          className="text-accent hover:underline"
+                        >
+                          {c.domain}
+                        </a>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <Citations ids={entitySourceIds(c)} index={citations} />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

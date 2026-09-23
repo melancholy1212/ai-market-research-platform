@@ -135,3 +135,33 @@ export function entitySourceIds(entity: Entity): string[] {
   const ids = (entity.metadata as { source_ids?: unknown } | null)?.source_ids;
   return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
 }
+
+export type EntityResolution = {
+  status: "resolved" | "ambiguous" | "unresolved";
+  wikidataId: string | null;
+  wikidataLabel: string | null;
+  wikidataDescription: string | null;
+  confidence: number | null;
+  signals: string[];
+  reason: string | null;
+  websiteSource: "sources" | "wikidata" | "search" | null;
+};
+
+// Resolution details stored on the entity; null for entities saved before
+// resolution existed.
+export function entityResolution(entity: Entity): EntityResolution | null {
+  const m = (entity.metadata ?? {}) as Record<string, unknown>;
+  const r = m.resolution as Record<string, unknown> | undefined;
+  if (!r || typeof r.status !== "string") return null;
+  const str = (v: unknown) => (typeof v === "string" ? v : null);
+  return {
+    status: r.status as EntityResolution["status"],
+    wikidataId: str(r.wikidata_id),
+    wikidataLabel: str(r.wikidata_label),
+    wikidataDescription: str(r.wikidata_description),
+    confidence: typeof r.confidence === "number" ? r.confidence : null,
+    signals: Array.isArray(r.signals) ? r.signals.filter((x): x is string => typeof x === "string") : [],
+    reason: str(r.reason),
+    websiteSource: str(m.website_source) as EntityResolution["websiteSource"],
+  };
+}

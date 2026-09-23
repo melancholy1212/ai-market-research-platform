@@ -2,6 +2,7 @@ import "server-only";
 
 import { AllProvidersFailedError, generateWithFallback } from "@/lib/ai/fallback";
 import { aiProviders } from "@/lib/ai/providers";
+import { resolveCompanies, type ResolvedCompany, type ResolutionStats } from "@/lib/entities";
 import { ProviderError } from "@/lib/http";
 import { rssSearch } from "@/lib/providers/rss";
 import { tavily } from "@/lib/providers/tavily";
@@ -43,16 +44,38 @@ const PROVIDER_NAMES: Record<string, string> = { gemini: "Gemini", groq: "Groq" 
 const providerName = (id: string) => PROVIDER_NAMES[id] ?? id;
 
 // Shapes a validated analysis into the payload save_research_analysis takes.
-function analysisPayload(analysis: Analysis, metadata: Json): Json {
-  const companyKeys = new Map(analysis.companies.map((c, i) => [c.name.toLowerCase(), `c${i}`]));
+function analysisPayload(analysis: Analysis, companies: ResolvedCompany[], metadata: Json): Json {
+  // Every name a company was merged from points at it, so developments that
+  // mention "Navi Technologies" link to the "Navi" entity.
+  const companyKeys = new Map(companies.flatMap((c, i) => c.names.map((n) => [n.toLowerCase(), `c${i}`] as const)));
   // The unique (research_id, domain) index allows one company per domain.
   const seenDomains = new Set<string>();
   return {
     report: { overview: analysis.summary, metadata },
-    companies: analysis.companies.map((c, i) => {
+    companies: companies.map((c, i) => {
       const domain = c.domain && !seenDomains.has(c.domain) ? c.domain : null;
       if (domain) seenDomains.add(domain);
-      return { key: `c${i}`, name: c.name, domain, country: c.country, description: c.focus, source_ids: c.sourceIds };
+      return {
+        key: `c${i}`,
+        name: c.name,
+        domain,
+        country: c.country,
+        description: c.focus,
+        source_ids: c.sourceIds,
+        metadata: {
+          names: c.names,
+          website_source: domain ? c.websiteSource : null,
+          resolution: {
+            status: c.resolution.status,
+            wikidata_id: c.resolution.wikidataId,
+            wikidata_label: c.resolution.wikidataLabel,
+            wikidata_description: c.resolution.wikidataDescription,
+            confidence: c.resolution.confidence,
+            signals: c.resolution.signals,
+            reason: c.resolution.reason,
+          },
+        },
+      };
     }),
     findings: [
       ...analysis.keyFindings.map((f) => ({ type: "key_finding", title: f.text, summary: null, occurred_at: null, company_key: null, source_ids: f.sourceIds })),
@@ -67,6 +90,39 @@ function analysisPayload(analysis: Analysis, metadata: Json): Json {
       ...analysis.trends.map((f) => ({ type: "trend", title: f.title, summary: f.summary, occurred_at: null, company_key: null, source_ids: f.sourceIds })),
     ],
   };
+}
+
+// Companies as extracted, marked unresolved: used when resolution fails.
+function unresolvedCompanies(analysis: Analysis): ResolvedCompany[] {
+  return analysis.companies.map((c) => ({
+    ...c,
+    names: [c.name],
+    websiteSource: c.domain ? "sources" : null,
+    resolution: {
+      status: "unresolved",
+      wikidataId: null,
+      wikidataLabel: null,
+      wikidataDescription: null,
+      confidence: null,
+      signals: [],
+      reason: "resolution unavailable",
+    },
+  }));
+}
+
+function describeResolution(stats: ResolutionStats, total: number): string {
+  const parts = [`${stats.resolved} of ${total} verified against Wikidata`];
+  if (stats.merged) parts.push(`${plural(stats.merged, "duplicate")} merged`);
+  const websites = stats.websites.sources + stats.websites.wikidata + stats.websites.search;
+  if (websites) {
+    const from = [
+      stats.websites.sources && `${stats.websites.sources} from sources`,
+      stats.websites.wikidata && `${stats.websites.wikidata} from Wikidata`,
+      stats.websites.search && `${stats.websites.search} from web search`,
+    ].filter(Boolean);
+    parts.push(`${plural(websites, "website")} found (${from.join(", ")})`);
+  }
+  return `Companies: ${parts.join("; ")}.`;
 }
 
 // A failure whose message is written for the end user.
@@ -308,19 +364,6 @@ export async function runResearch(researchId: string): Promise<void> {
           );
         }
         const { analysis, stats: validation } = result.value;
-        const metadata = {
-          provider: result.provider,
-          model: result.model,
-          input_tokens: result.inputTokens,
-          output_tokens: result.outputTokens,
-          sources_analyzed: sourcesAnalyzed,
-          validation,
-        };
-        const { error: saveError } = await supabase
-          .rpc("save_research_analysis", { p_research_id: researchId, p_analysis: analysisPayload(analysis, metadata) })
-          // The function refuses a second save, so retrying is safe.
-          .setHeader(RETRY_SAFE_HEADER, "1");
-        if (saveError) throw new Error(`saving analysis failed: ${saveError.message}`);
 
         const dropped = validation.droppedItems + validation.droppedWebsites;
         if (sourcesAnalyzed < analysisSources.length) {
@@ -336,8 +379,46 @@ export async function runResearch(researchId: string): Promise<void> {
             `${plural(analysis.developments.length, "development")}, ${plural(analysis.trends.length, "trend")}` +
             (dropped ? `. Discarded ${plural(dropped, "unsupported claim")}.` : "."),
           "info",
-          metadata,
+          { provider: result.provider, model: result.model, input_tokens: result.inputTokens, output_tokens: result.outputTokens, validation },
         );
+
+        // Resolving: verify companies and find websites before saving, so
+        // the analysis is stored in one transaction with resolved entities.
+        let companies: ResolvedCompany[];
+        let resolution: ResolutionStats | null = null;
+        if (analysis.companies.length > 0) {
+          await setStatus("resolving");
+          try {
+            ({ companies, stats: resolution } = await resolveCompanies(analysis.companies, `${research.query} ${research.focus ?? ""}`));
+            await log("resolving", describeResolution(resolution, companies.length), "info", resolution);
+            if (resolution.searchBlocked) {
+              await log("resolving", "Web search for company websites is paused after hitting its rate limit; some websites may be missing.", "warning");
+            }
+            if (resolution.wikidataErrors) {
+              await log("resolving", "Some Wikidata lookups failed; those companies stay unverified.", "warning");
+            }
+          } catch (error) {
+            console.error(`runResearch ${researchId}: entity resolution failed`, error);
+            companies = unresolvedCompanies(analysis);
+            await log("resolving", "Company verification failed; companies are shown unverified.", "warning");
+          }
+        } else {
+          companies = [];
+        }
+        const metadata = {
+          provider: result.provider,
+          model: result.model,
+          input_tokens: result.inputTokens,
+          output_tokens: result.outputTokens,
+          sources_analyzed: sourcesAnalyzed,
+          validation,
+          resolution,
+        };
+        const { error: saveError } = await supabase
+          .rpc("save_research_analysis", { p_research_id: researchId, p_analysis: analysisPayload(analysis, companies, metadata) })
+          // The function refuses a second save, so retrying is safe.
+          .setHeader(RETRY_SAFE_HEADER, "1");
+        if (saveError) throw new Error(`saving analysis failed: ${saveError.message}`);
       } catch (error) {
         // Analysis failing must not throw away the collected sources: the
         // research still completes, and the log says why there is no report.

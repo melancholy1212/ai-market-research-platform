@@ -38,6 +38,7 @@ const STATUS_NOTES: Partial<Record<ResearchStatus, string>> = {
   collecting: "Searching news and web sources.",
   processing: "Cleaning up sources and grouping duplicate stories.",
   analyzing: "Analyzing the sources with AI. This usually takes under a minute.",
+  resolving: "Verifying companies against Wikidata and finding their websites.",
 };
 
 // Placeholders shown until a research has an analysis; never fake data.
