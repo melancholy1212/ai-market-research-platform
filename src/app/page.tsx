@@ -1,39 +1,77 @@
+import Link from "next/link";
+import { connection } from "next/server";
+
+import { ResearchCard } from "@/components/research-card";
 import { ResearchForm } from "@/components/research-form";
+import { listResearchSummaries, type ResearchSummary } from "@/lib/research";
 
 // The research run executes in the background of the server action that
 // this page's form calls, so it gets this route's time budget. 300s is the
-// Vercel Hobby maximum; a run normally finishes in well under a minute.
+// Vercel Hobby maximum; a run normally finishes in under a minute.
 export const maxDuration = 300;
 
+const EXAMPLES = ["Fintech startups in India", "AI startups in Germany", "Cybersecurity startups in Europe", "Robotics startups in Japan"];
+
 const PIPELINE = [
-  { title: "Plan", body: "Interpret the question and break it into research subtopics." },
-  { title: "Collect", body: "Query search, news and public data sources for each subtopic." },
-  { title: "Clean", body: "Normalize, deduplicate and resolve companies to stable identities." },
-  { title: "Analyze", body: "Filter for relevance, extract findings and identify trends." },
-  { title: "Report", body: "Produce a report where every finding links to its sources." },
+  { title: "Collect", body: "Web search, news search and six news sites' search feeds, with caching and per-source error handling." },
+  { title: "Clean", body: "Normalize URLs and titles, drop block pages, and group the same story reported by different outlets." },
+  { title: "Filter", body: "Score each story for the question's topic and place; off-topic ones are set aside, not hidden." },
+  { title: "Analyze", body: "One AI call over the on-topic stories. Every claim must cite sources, and the output is validated." },
+  { title: "Verify", body: "Resolve companies against Wikidata by country and website, and find their official sites." },
 ];
 
-export default function Home() {
+async function recentReports(): Promise<ResearchSummary[]> {
+  try {
+    return (await listResearchSummaries({ limit: 12, completedOnly: true })).filter((r) => r.overview).slice(0, 4);
+  } catch {
+    return []; // The landing page works without a database.
+  }
+}
+
+export default async function Home() {
+  await connection();
+  const recent = await recentReports();
+
   return (
-    <div className="mx-auto max-w-3xl">
-      <section className="pt-6 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-          Market research, backed by sources
-        </h1>
-        <p className="mx-auto mt-3 max-w-xl text-muted text-pretty">
-          Ask a market research question. Get a structured report on the companies, recent
-          developments and emerging trends, with every finding traceable to where it came from.
+    <div className="mx-auto max-w-4xl">
+      <section className="pt-4 text-center sm:pt-8">
+        <p className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted">
+          <span aria-hidden className="size-1.5 rounded-full bg-emerald-500" />
+          Every finding links to the sources it came from
+        </p>
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-balance sm:text-5xl">Market research, backed by sources</h1>
+        <p className="mx-auto mt-4 max-w-2xl text-muted text-pretty sm:text-lg">
+          Ask a question about a market. Get a structured report on the companies, recent developments and emerging trends,
+          built from real web and news sources and verified where it can be.
         </p>
       </section>
 
-      <ResearchForm />
+      <div className="mx-auto max-w-3xl">
+        <ResearchForm examples={EXAMPLES} />
+      </div>
+
+      {recent.length > 0 && (
+        <section className="mt-14">
+          <div className="flex items-end justify-between gap-4">
+            <h2 className="text-sm font-medium tracking-wide text-muted uppercase">Recent reports</h2>
+            <Link href="/research" className="text-sm text-accent hover:underline">
+              All research →
+            </Link>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {recent.map((r) => (
+              <ResearchCard key={r.id} research={r} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="mt-14">
         <h2 className="text-sm font-medium tracking-wide text-muted uppercase">How it works</h2>
-        <ol className="mt-4 grid gap-3 sm:grid-cols-5">
+        <ol className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {PIPELINE.map((step, i) => (
             <li key={step.title} className="rounded-lg border border-border bg-surface p-4">
-              <p className="font-mono text-xs text-muted">{String(i + 1).padStart(2, "0")}</p>
+              <p className="font-mono text-xs text-accent">{String(i + 1).padStart(2, "0")}</p>
               <p className="mt-1 text-sm font-medium">{step.title}</p>
               <p className="mt-1 text-xs leading-relaxed text-muted">{step.body}</p>
             </li>

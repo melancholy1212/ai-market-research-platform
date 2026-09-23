@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef } from "react";
 
 import { createResearchAction, type CreateResearchState } from "@/app/actions";
 import { FOCUS_MAX_LENGTH, QUERY_MAX_LENGTH } from "@/lib/research-input";
@@ -10,8 +10,9 @@ const INPUT_CLASS =
 
 const initialState: CreateResearchState = {};
 
-export function ResearchForm() {
+export function ResearchForm({ examples = [] }: { examples?: string[] }) {
   const [state, formAction, pending] = useActionState(createResearchAction, initialState);
+  const queryRef = useRef<HTMLTextAreaElement>(null);
 
   return (
     <form
@@ -24,6 +25,7 @@ export function ResearchForm() {
             Research question
           </label>
           <textarea
+            ref={queryRef}
             id="query"
             name="query"
             rows={3}
@@ -42,6 +44,25 @@ export function ResearchForm() {
             <p id="query-error" className="mt-1 text-xs text-red-600 dark:text-red-400">
               {state.errors.query}
             </p>
+          )}
+          {examples.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted">Try:</span>
+              {examples.map((example) => (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() => {
+                    if (!queryRef.current) return;
+                    queryRef.current.value = example;
+                    queryRef.current.focus();
+                  }}
+                  className="rounded-full border border-border px-2.5 py-0.5 text-xs text-muted hover:border-accent hover:text-accent"
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
           )}
         </div>
         <div>

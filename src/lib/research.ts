@@ -165,3 +165,31 @@ export function entityResolution(entity: Entity): EntityResolution | null {
     websiteSource: str(m.website_source) as EntityResolution["websiteSource"],
   };
 }
+
+export type ResearchSummary = Research & {
+  sourceCount: number;
+  companyCount: number;
+  overview: string | null;
+};
+
+// Research list with the counts and overview excerpt shown on history and
+// landing cards, in one query (PostgREST embedded counts).
+export async function listResearchSummaries(
+  options: { limit?: number; completedOnly?: boolean } = {},
+): Promise<ResearchSummary[]> {
+  let query = getSupabase()
+    .from("researches")
+    .select("*, sources(count), entities(count), reports(overview)")
+    .order("created_at", { ascending: false })
+    .limit(options.limit ?? 50);
+  if (options.completedOnly) query = query.eq("status", "completed");
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Failed to load research history: ${error.message}`);
+  return data.map(({ sources, entities, reports, ...r }) => ({
+    ...r,
+    sourceCount: sources[0]?.count ?? 0,
+    companyCount: entities[0]?.count ?? 0,
+    overview: (Array.isArray(reports) ? reports[0]?.overview : reports?.overview) ?? null,
+  }));
+}
