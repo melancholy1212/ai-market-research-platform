@@ -21,6 +21,19 @@ export function cacheKey(request: unknown): string {
   return createHash("sha256").update(stableStringify(request)).digest("hex");
 }
 
+// A fresh cached response for `request`, or undefined. Never calls out.
+export async function readCache(provider: string, request: unknown): Promise<Json | undefined> {
+  const { data, error } = await getSupabase()
+    .from("provider_cache")
+    .select("response")
+    .eq("provider", provider)
+    .eq("cache_key", cacheKey(request))
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  if (error) console.warn(`provider_cache read failed for ${provider}`, error.message);
+  return data?.response;
+}
+
 // Returns the cached raw response for `request` if fresh, otherwise calls
 // `fetcher` and stores what it returns. Callers cache raw provider
 // responses and parse afterwards, so parser fixes apply to cached data too.
