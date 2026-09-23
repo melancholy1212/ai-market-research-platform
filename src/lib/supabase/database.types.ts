@@ -64,6 +64,7 @@ export type Database = {
           source_type: string;
           extracted_text: string | null;
           metadata: Json;
+          duplicate_of: string | null;
           created_at: string;
         };
         Insert: {
@@ -77,6 +78,7 @@ export type Database = {
           source_type: string;
           extracted_text?: string | null;
           metadata?: Json;
+          duplicate_of?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["sources"]["Insert"]>;
@@ -86,6 +88,13 @@ export type Database = {
             columns: ["research_id"];
             isOneToOne: false;
             referencedRelation: "researches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "sources_duplicate_of_fkey";
+            columns: ["duplicate_of"];
+            isOneToOne: false;
+            referencedRelation: "sources";
             referencedColumns: ["id"];
           },
         ];

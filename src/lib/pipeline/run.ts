@@ -5,12 +5,28 @@ import { rssSearch } from "@/lib/providers/rss";
 import { tavily } from "@/lib/providers/tavily";
 import type { SearchProvider } from "@/lib/providers/types";
 import type { EventLevel, Json, ResearchStatus } from "@/lib/supabase/database.types";
+import { RETRY_SAFE_HEADER } from "@/lib/supabase/retrying-fetch";
 import { getSupabase } from "@/lib/supabase/server";
 
+import { groupStories, titleTokens } from "./dedup";
 import { mergeCandidates, type MergeInput } from "./merge";
+import { normalizeSources, type NormalizedSource } from "./normalize";
 import { buildSearchPlan, type SearchTask } from "./plan";
 
 const PROVIDERS: Record<string, SearchProvider> = { [tavily.id]: tavily, [rssSearch.id]: rssSearch };
+
+// The most informative source of a story should be its primary: found by
+// more searches, dated, with a snippet, then news before web.
+function primaryFirst(a: NormalizedSource, b: NormalizedSource): number {
+  return (
+    b.foundBy.length - a.foundBy.length ||
+    Number(Boolean(b.publishedAt)) - Number(Boolean(a.publishedAt)) ||
+    Number(Boolean(b.snippet)) - Number(Boolean(a.snippet)) ||
+    Number(b.type === "news") - Number(a.type === "news")
+  );
+}
+
+const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
 
 // A failure whose message is written for the end user.
 class RunError extends Error {}
@@ -65,7 +81,9 @@ export async function runResearch(researchId: string): Promise<void> {
   async function log(stage: string, message: string, level: EventLevel = "info", metadata: Json = {}) {
     const { error } = await supabase
       .from("research_events")
-      .insert({ research_id: researchId, stage, level, message, metadata });
+      .insert({ research_id: researchId, stage, level, message, metadata })
+      // A rare duplicate log line is better than a missing one.
+      .setHeader(RETRY_SAFE_HEADER, "1");
     if (error) console.warn(`runResearch ${researchId}: event not saved`, error.message);
   }
 
@@ -129,40 +147,84 @@ export async function runResearch(researchId: string): Promise<void> {
       throw new RunError("None of the data sources could be reached. Please try again later.");
     }
 
-    // Processing: URL normalization and exact-duplicate removal.
+    // Processing: exact duplicates (same URL), normalization, then story
+    // grouping (same story, different URL).
     await setStatus("processing");
-    const { sources, stats } = mergeCandidates(succeeded);
+    const merged = mergeCandidates(succeeded);
+    const normalized = normalizeSources(merged.sources);
+    const ordered = [...normalized.sources].sort(primaryFirst);
+    const groups = groupStories(ordered, titleTokens(`${research.query} ${research.focus ?? ""}`));
 
-    if (sources.length > 0) {
-      const { error: insertError } = await supabase.from("sources").upsert(
-        sources.map((s) => ({
-          research_id: researchId,
-          url: s.url,
-          canonical_url: s.canonicalUrl,
-          title: s.title,
-          publisher: s.publisher,
-          published_at: s.publishedAt,
-          source_type: s.type,
-          extracted_text: s.snippet,
-          metadata: { found_by: s.foundBy },
-        })),
-        { onConflict: "research_id,canonical_url", ignoreDuplicates: true },
-      );
+    const row = (s: NormalizedSource, extra: { duplicate_of?: string; dedup?: Json } = {}) => ({
+      research_id: researchId,
+      url: s.url,
+      canonical_url: s.canonicalUrl,
+      title: s.title,
+      publisher: s.publisher,
+      published_at: s.publishedAt,
+      source_type: s.type,
+      extracted_text: s.snippet,
+      duplicate_of: extra.duplicate_of ?? null,
+      metadata: {
+        found_by: s.foundBy,
+        ...(s.titleTruncated ? { title_truncated: true } : {}),
+        ...(extra.dedup ? { dedup: extra.dedup } : {}),
+      },
+    });
+
+    // Primaries first, so duplicates can reference their ids.
+    const primaryIds = new Map<string, string>();
+    if (groups.length > 0) {
+      const { data: inserted, error: insertError } = await supabase
+        .from("sources")
+        .upsert(
+          groups.map((g) => row(g.primary)),
+          { onConflict: "research_id,canonical_url", ignoreDuplicates: true },
+        )
+        .select("id, canonical_url");
       if (insertError) throw new Error(`saving sources failed: ${insertError.message}`);
+      for (const r of inserted) primaryIds.set(r.canonical_url, r.id);
     }
 
+    const duplicateRows = groups.flatMap((g) => {
+      const primaryId = primaryIds.get(g.primary.canonicalUrl);
+      return primaryId
+        ? g.duplicates.map((d) =>
+            row(d.source, { duplicate_of: primaryId, dedup: { reason: d.match.reason, similarity: d.match.similarity } }),
+          )
+        : [];
+    });
+    if (duplicateRows.length > 0) {
+      const { error: dupError } = await supabase
+        .from("sources")
+        .upsert(duplicateRows, { onConflict: "research_id,canonical_url", ignoreDuplicates: true });
+      if (dupError) throw new Error(`saving duplicate sources failed: ${dupError.message}`);
+    }
+
+    const total = normalized.sources.length;
+    const grouped = duplicateRows.length;
     const removed = [
-      stats.duplicates && `${stats.duplicates} duplicate${stats.duplicates === 1 ? "" : "s"}`,
-      stats.invalidUrls && `${stats.invalidUrls} unusable URL${stats.invalidUrls === 1 ? "" : "s"}`,
+      merged.stats.duplicates && plural(merged.stats.duplicates, "repeated URL"),
+      merged.stats.invalidUrls && plural(merged.stats.invalidUrls, "unusable URL"),
+      normalized.stats.junk && plural(normalized.stats.junk, "unreadable page"),
     ].filter(Boolean);
     await log(
       "processing",
-      sources.length === 0
+      total === 0
         ? "The searches returned no usable sources for this question."
-        : `Kept ${sources.length} unique source${sources.length === 1 ? "" : "s"}${removed.length ? ` after removing ${removed.join(" and ")}` : ""}.`,
-      sources.length === 0 ? "warning" : "info",
-      stats,
+        : `Kept ${plural(total, "source")}${removed.length ? ` after removing ${removed.join(", ")}` : ""}.`,
+      total === 0 ? "warning" : "info",
+      { ...merged.stats, ...normalized.stats },
     );
+    if (grouped > 0) {
+      const stories = groups.filter((g) => g.duplicates.length > 0).length;
+      await log(
+        "processing",
+        `Found ${plural(stories, "story", "stories")} covered by more than one source (${plural(grouped, "additional report")} grouped).`,
+        "info",
+        { stories, grouped },
+      );
+    }
 
     const { error: completeError } = await supabase
       .from("researches")

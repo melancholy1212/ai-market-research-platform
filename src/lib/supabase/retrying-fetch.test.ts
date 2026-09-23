@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createRetryingFetch } from "./retrying-fetch";
+import { createRetryingFetch, RETRY_SAFE_HEADER } from "./retrying-fetch";
 
 const ok = () => new Response("ok");
 const networkError = () => new TypeError("fetch failed");
@@ -37,5 +37,15 @@ describe("createRetryingFetch", () => {
     const base = vi.fn().mockRejectedValue(networkError());
     await expect(createRetryingFetch(base)("https://db.test")).rejects.toThrow("fetch failed");
     expect(base).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("createRetryingFetch: opt-in", () => {
+  it("retries an insert marked retry-safe and strips the marker", async () => {
+    const base = vi.fn().mockRejectedValueOnce(networkError()).mockResolvedValueOnce(ok());
+    await createRetryingFetch(base)("https://db.test", { method: "POST", headers: { [RETRY_SAFE_HEADER]: "1" } });
+    expect(base).toHaveBeenCalledTimes(2);
+    const sentHeaders = new Headers(base.mock.calls[1][1].headers);
+    expect(sentHeaders.has(RETRY_SAFE_HEADER)).toBe(false);
   });
 });

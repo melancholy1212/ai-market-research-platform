@@ -6,7 +6,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { EmptyState } from "@/components/empty-state";
 import { ProgressLog } from "@/components/progress-log";
 import { SetupNotice } from "@/components/setup-notice";
-import { SourceList } from "@/components/source-list";
+import { groupSourcesByStory, SourceList } from "@/components/source-list";
 import { StatusBadge } from "@/components/status-badge";
 import { MissingEnvError } from "@/lib/env";
 import { formatDateTime } from "@/lib/format";
@@ -27,7 +27,7 @@ const STATUS_NOTES: Partial<Record<ResearchStatus, string>> = {
   pending: "Queued. The run starts in a moment.",
   planning: "Planning searches for the question.",
   collecting: "Searching news and web sources.",
-  processing: "Normalizing URLs and removing duplicates.",
+  processing: "Cleaning up sources and grouping duplicate stories.",
   analyzing: "Analyzing findings.",
 };
 
@@ -59,6 +59,7 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
   const terminal = research.status === "completed" || research.status === "failed";
   const running = !terminal && !stale;
   const note = running ? STATUS_NOTES[research.status] : undefined;
+  const stories = groupSourcesByStory(sources);
 
   return (
     <div>
@@ -124,11 +125,17 @@ export default async function ResearchDetailPage({ params }: PageProps<"/researc
 
         <section>
           <h2 className="text-lg font-semibold tracking-tight">
-            Sources {sources.length > 0 && <span className="font-normal text-muted">({sources.length})</span>}
+            Sources{" "}
+            {sources.length > 0 && (
+              <span className="font-normal text-muted">
+                ({sources.length}
+                {stories.length < sources.length && ` sources, ${stories.length} stories`})
+              </span>
+            )}
           </h2>
           <div className="mt-3">
             {sources.length > 0 ? (
-              <SourceList sources={sources} />
+              <SourceList stories={stories} />
             ) : (
               <EmptyState
                 title={running ? "Collecting sources…" : "No sources"}

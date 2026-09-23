@@ -33,11 +33,10 @@ within Vercel's 300s function limit) and reports progress as it goes:
    rate limits, exhausted quotas and malformed responses are caught per
    search, logged in plain language, and the run continues with whatever
    succeeded. It fails only if every source fails.
-3. **Process**: URLs are normalized (scheme, `www`, tracking parameters,
-   trailing slashes, fragments) and exact duplicates are merged, keeping a
-   record of every search that found each source.
+3. **Process**: exact duplicates, normalization, then story grouping (see
+   below).
 4. **Store**: sources are upserted with a unique constraint on
-   `(research_id, canonical_url)`, so duplicates cannot slip in.
+   `(research_id, canonical_url)`, so exact duplicates cannot slip in.
 
 Each stage writes to `research_events`, which the page shows as a live run
 log. The page refreshes itself while the run is active.
@@ -57,6 +56,45 @@ topic-filtered results. Individual outlets failing is reported as a warning
 in the run log; the search fails only if none can be read. GDELT was tried
 first and dropped: it rate-limits shared IPs (including Vercel's) and
 returned no results for typical queries.
+
+## Normalization and deduplication
+
+All deterministic; no LLM involved.
+
+1. **Exact duplicates.** URLs are normalized (scheme, `www`, host case,
+   tracking parameters, fragments, trailing slashes, parameter order) and
+   sources with the same normalized URL are merged, keeping a record of every
+   search that found them.
+2. **Normalization.** Block and error pages ("Access Denied", "Just a
+   moment...") are dropped. Titles lose leading emoji and trailing site names
+   ("... | Wellfound", "... - Wikipedia") when the suffix matches the publisher
+   or host, and truncated titles are flagged. Publisher names are unified
+   across providers (`inc42.com` from web search and `Inc42` from the news
+   search become one outlet). Future and pre-1995 dates are discarded.
+3. **Story grouping.** Sources reporting the same story under different URLs
+   are grouped, not deleted: each duplicate points at its story's primary
+   (`sources.duplicate_of`), so every outlet stays visible as evidence. Two
+   sources are the same story when:
+   - their titles are near-identical (Jaccard >= 0.9), or
+   - both are dated within 4 days and their titles are similar (Jaccard, or
+     containment for rewrites that extend a headline), or
+   - both are dated within 3 days and share a money figure *and* a
+     non-generic word: "Exein raises $270 Million" and "Italy's Exein hits
+     unicorn status with $270m".
+
+   The rules favour precision, because merging two different stories hides
+   evidence. Words from the research question are ignored for title
+   similarity (every result shares them). Recurring formats with identical
+   titles (weekly round-ups) are kept apart by their dates. A source joins a
+   group only by matching its primary, which prevents A~B~C chains, except
+   through the figure rule, which is strong enough to bridge "$270M" and
+   "$1.7B valuation" headlines about one round via a headline stating both.
+
+   On real coverage of one funding round, 12 reports from different outlets
+   were grouped into one story with no false merges across three unrelated
+   research runs. Headline rewrites with no shared figure or wording ("New
+   Italian unicorn Exein rides the physical AI wave") are not caught; that is
+   left to the AI stages.
 
 **Caching**: raw provider responses are cached in Postgres
 (`provider_cache`) keyed by a hash of the request, for 24h (web) or 6h
@@ -80,7 +118,7 @@ src/
   lib/
     env.ts              server env handling
     research.ts         research queries
-    pipeline/           run orchestration, search plan, candidate merge
+    pipeline/           run orchestration, search plan, merge, normalize, dedup
     providers/          Tavily and news-site (RSS) search, provider cache
     http.ts             timeouts, retries, typed provider errors
     url.ts              URL normalization
@@ -149,7 +187,7 @@ npm run build
 1. ~~Application foundation~~
 2. ~~Research creation and persistence~~
 3. ~~Source discovery and ingestion~~
-4. Normalization and deduplication
+4. ~~Normalization and deduplication~~
 5. Entity resolution
 6. Relevance filtering
 7. AI analysis
