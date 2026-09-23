@@ -38,6 +38,7 @@ export type Database = {
           created_at: string;
           updated_at: string;
           completed_at: string | null;
+          constraints: Json | null;
         };
         Insert: {
           id?: string;
@@ -49,6 +50,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           completed_at?: string | null;
+          constraints?: Json | null;
         };
         Update: Partial<Database["public"]["Tables"]["researches"]["Insert"]>;
         Relationships: [];
@@ -68,6 +70,8 @@ export type Database = {
           duplicate_of: string | null;
           relevance_score: number | null;
           is_relevant: boolean | null;
+          relevance_label: "direct" | "contextual" | "irrelevant" | null;
+          relevance_reason: string | null;
           created_at: string;
         };
         Insert: {
@@ -84,6 +88,8 @@ export type Database = {
           duplicate_of?: string | null;
           relevance_score?: number | null;
           is_relevant?: boolean | null;
+          relevance_label?: "direct" | "contextual" | "irrelevant" | null;
+          relevance_reason?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["sources"]["Insert"]>;

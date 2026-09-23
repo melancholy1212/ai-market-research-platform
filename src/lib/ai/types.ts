@@ -5,7 +5,8 @@
 // every property required, no additional properties. Unknown values are
 // empty strings rather than null, which keeps the schema portable.
 export type JsonSchema =
-  | { type: "string"; description?: string }
+  | { type: "string"; description?: string; enum?: string[] }
+  | { type: "number"; description?: string }
   | { type: "array"; items: JsonSchema; description?: string }
   | {
       type: "object";

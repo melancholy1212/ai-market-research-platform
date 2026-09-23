@@ -18,7 +18,13 @@ export function geminiModels(): string[] {
 function toGeminiSchema(schema: JsonSchema): Record<string, unknown> {
   switch (schema.type) {
     case "string":
-      return { type: "STRING", ...(schema.description ? { description: schema.description } : {}) };
+      return {
+        type: "STRING",
+        ...(schema.description ? { description: schema.description } : {}),
+        ...(schema.enum ? { format: "enum", enum: schema.enum } : {}),
+      };
+    case "number":
+      return { type: "NUMBER", ...(schema.description ? { description: schema.description } : {}) };
     case "array":
       return { type: "ARRAY", items: toGeminiSchema(schema.items) };
     case "object":
