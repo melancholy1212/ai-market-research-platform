@@ -13,11 +13,20 @@ export const maxDuration = 300;
 const EXAMPLES = ["Fintech startups in India", "AI startups in Germany", "Cybersecurity startups in Europe", "Robotics startups in Japan"];
 
 const PIPELINE = [
-  { title: "Collect", body: "Web search, news search and six news sites' search feeds, with caching and per-source error handling." },
+  { title: "Collect", body: "Web search, news search and seven news sites' search feeds, with caching and per-source error handling." },
   { title: "Clean", body: "Normalize URLs and titles, drop block pages, and group the same story reported by different outlets." },
-  { title: "Filter", body: "Score each story for the question's topic and place; off-topic ones are set aside, not hidden." },
-  { title: "Analyze", body: "One AI call over the on-topic stories. Every claim must cite sources, and the output is validated." },
-  { title: "Verify", body: "Resolve companies against Wikidata by country and website, and find their official sites." },
+  {
+    title: "Filter",
+    body: "Classify each source as direct, contextual or irrelevant against the question's topic, geography and entity type; irrelevant ones are kept, not hidden.",
+  },
+  {
+    title: "Analyze",
+    body: "Direct and contextual sources are analyzed with AI to build the report, direct ones prioritized, with every claim cited and validated.",
+  },
+  {
+    title: "Verify",
+    body: "Confirm companies with several signals — official websites, independent coverage, entity matching — not Wikidata alone.",
+  },
 ];
 
 async function recentReports(): Promise<ResearchSummary[]> {
