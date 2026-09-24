@@ -77,7 +77,17 @@ const OFF_PURPOSE = [
   },
   { pattern: /^(log ?in|sign ?in|sign ?up)\b|\b(coupon|promo code)s?\b/i, reason: "not an article" },
 ];
-const JOB_HOSTS = new Set(["naukri.com", "indeed.com", "glassdoor.com", "monster.com", "ambitionbox.com"]);
+const JOB_HOSTS = new Set(["naukri.com", "indeed.com", "glassdoor.com", "monster.com", "ambitionbox.com", "workinstartups.com"]);
+
+// Job listings and similar non-article pages, detected from the title or
+// hosting site. Exported so callers can enforce it as a hard rule after AI
+// classification: whatever label the AI gives, a job board is never a
+// useful source for a market-research question.
+export function offPurposeReason(title: string | null, url: string): string | null {
+  const host = displayHost(url) ?? "";
+  const match = OFF_PURPOSE.find((o) => o.pattern.test(title ?? "")) ?? (JOB_HOSTS.has(host) ? { reason: "job listing" } : null);
+  return match?.reason ?? null;
+}
 
 // Display forms for reasons: "Germany", "United States", "AI".
 const displayPlace = (p: string) => p.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
@@ -151,8 +161,8 @@ export function scoreRelevance(source: RelevanceInput, ctx: RelevanceContext, no
     reasons.push(`found by ${source.foundByCount} searches`);
   }
 
-  const offPurpose = OFF_PURPOSE.find((o) => o.pattern.test(title)) ?? (JOB_HOSTS.has(host) ? { reason: "job listing" } : null);
-  if (offPurpose) reasons.push(offPurpose.reason);
+  const offPurposeReasonText = offPurposeReason(title, source.url);
+  if (offPurposeReasonText) reasons.push(offPurposeReasonText);
 
   if (source.publishedAt) {
     const age = (now - Date.parse(source.publishedAt)) / YEAR_MS;
@@ -171,7 +181,7 @@ export function scoreRelevance(source: RelevanceInput, ctx: RelevanceContext, no
   // topic match elsewhere ("China's humanoid robot industry" for Japan)
   // fails; and off-purpose pages are never relevant.
   if (ctx.places.length && place === 0) score = Math.min(score, RELEVANCE_THRESHOLD - 0.05);
-  if (offPurpose) score = Math.min(score, 0.2);
+  if (offPurposeReasonText) score = Math.min(score, 0.2);
   return { score: Math.round(score * 100) / 100, relevant: score >= RELEVANCE_THRESHOLD, reasons };
 }
 

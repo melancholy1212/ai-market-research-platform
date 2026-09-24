@@ -24,7 +24,7 @@ import { groupStories, titleTokens } from "./dedup";
 import { mergeCandidates, type MergeInput } from "./merge";
 import { normalizeSources, type NormalizedSource } from "./normalize";
 import { classifyWithAI } from "./classify";
-import { judgeStories, relevanceContext, type Relevance } from "./relevance";
+import { judgeStories, offPurposeReason, relevanceContext, type Relevance } from "./relevance";
 import {
   fallbackClassification,
   fallbackConstraints,
@@ -359,6 +359,21 @@ export async function runResearch(researchId: string): Promise<void> {
       .eq("id", researchId);
     if (constraintsError) console.warn(`runResearch ${researchId}: constraints not saved`, constraintsError.message);
 
+    // Hard rule, applied after both the AI and the keyword fallback: a job
+    // listing is never a useful market-research source, whatever label it
+    // was given. The AI mostly gets this right on its own, but is not
+    // guaranteed to (e.g. workinstartups.com's "Fintech Jobs in UK" was once
+    // labelled contextual), so it is enforced deterministically here.
+    let jobListingsOverridden = 0;
+    groups.forEach((g, i) => {
+      if (storyClass[i].label === "irrelevant") return;
+      const reason = offPurposeReason(g.primary.title, g.primary.url);
+      if (reason) {
+        storyClass[i] = { label: "irrelevant", score: Math.min(storyClass[i].score, 0.15), reason };
+        jobListingsOverridden++;
+      }
+    });
+
     const row = (
       s: NormalizedSource,
       relevance: { own: Relevance; story: SourceClassification },
@@ -426,9 +441,16 @@ export async function runResearch(researchId: string): Promise<void> {
       await log(
         "processing",
         `Relevance filtering complete: ${count("direct")} direct, ${count("contextual")} contextual, ${count("irrelevant")} irrelevant` +
-          (aiClassified === 0 ? " (keyword matching; AI unavailable)." : "."),
+          (aiClassified === 0 ? " (keyword matching; AI unavailable)." : ".") +
+          (jobListingsOverridden ? ` ${plural(jobListingsOverridden, "job listing")} excluded.` : ""),
         "info",
-        { direct: count("direct"), contextual: count("contextual"), irrelevant: count("irrelevant"), method: aiClassified > 0 ? "ai" : "keyword" },
+        {
+          direct: count("direct"),
+          contextual: count("contextual"),
+          irrelevant: count("irrelevant"),
+          method: aiClassified > 0 ? "ai" : "keyword",
+          jobListingsOverridden,
+        },
       );
     }
 

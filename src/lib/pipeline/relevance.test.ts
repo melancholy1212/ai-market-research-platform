@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { judgeStories, relevanceContext, scoreRelevance, summarizeReasons, type RelevanceInput } from "./relevance";
+import { judgeStories, offPurposeReason, relevanceContext, scoreRelevance, summarizeReasons, type RelevanceInput } from "./relevance";
 
 // Cases taken from real research runs.
 const NOW = Date.parse("2026-09-24T00:00:00Z");
@@ -116,5 +116,28 @@ describe("judgeStories", () => {
     );
     // With only 3 stories and no partial matches, nothing is promoted.
     expect(summarizeReasons(judged)).toBe("2 not about Germany, 1 job listing");
+  });
+});
+
+describe("offPurposeReason: hard rule usable regardless of the label a classifier gives", () => {
+  it("flags job listings by title", () => {
+    expect(offPurposeReason("Fintech Startup Jobs in UK - London", "https://example.com/jobs")).toBe("job listing");
+    expect(offPurposeReason("Best Artificial Intelligence Companies to Work for in Germany 2026", "https://example.com/x")).toBe(
+      "job listing",
+    );
+  });
+
+  it("flags known job-board hosts even with a generic title", () => {
+    // Real case: workinstartups.com's UK fintech jobs page was labelled
+    // "contextual" by the AI classifier; the host-based rule catches it too.
+    expect(offPurposeReason("Fintech Jobs in UK - London", "https://workinstartups.com/jobs/fintech")).toBe("job listing");
+  });
+
+  it("does not flag an article that merely discusses jobs", () => {
+    expect(offPurposeReason("In Japan, the robot isn’t coming for your job; it’s filling the one nobody wants", "https://techcrunch.com/x")).toBeNull();
+  });
+
+  it("returns null for ordinary articles", () => {
+    expect(offPurposeReason("German AI startup Parloa triples valuation to $3 billion", "https://reuters.com/x")).toBeNull();
   });
 });
