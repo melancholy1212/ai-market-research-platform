@@ -84,6 +84,11 @@ const ORG_CLASSES = new Set([
   "Q650241", "Q658255", "Q20074337", "Q167037", "Q2085381", "Q17127659",
 ]);
 const ORG_WORDS = /\b(company|startup|firm|provider|platform|bank|business|enterprise|fintech|manufacturer|developer|organi[sz]ation|corporation|conglomerate)\b/i;
+// Wikidata has hundreds of narrow organization subclasses ("dot-com company",
+// "unicorn startup", "software company"...) that ORG_CLASSES cannot list
+// exhaustively. Their own labels almost always say so, so the label of each
+// instanceOf item is checked too, alongside the description.
+const ORG_CLASS_WORDS = /\b(compan(y|ies)|startup|firm|corporation|business|enterprise|bank|organi[sz]ation)\b/i;
 
 export type CompanyToResolve = {
   name: string;
@@ -115,13 +120,16 @@ export function scoreCandidate(
   entity: WikidataEntity,
   countryLabels: ReadonlyMap<string, string>,
   context: string,
+  classLabels: ReadonlyMap<string, string> = new Map(),
 ): CandidateMatch | { rejected: string } {
   const keys = nameKeys(company.name);
   const names = [entity.label, ...entity.aliases].filter((n): n is string => Boolean(n));
   if (!names.some((n) => [...nameKeys(n)].some((k) => keys.has(k)))) return { rejected: "name differs" };
 
   const description = entity.description ?? "";
-  const isOrg = entity.instanceOf.some((c) => ORG_CLASSES.has(c)) || ORG_WORDS.test(description);
+  const isOrg =
+    entity.instanceOf.some((c) => ORG_CLASSES.has(c) || ORG_CLASS_WORDS.test(classLabels.get(c) ?? "")) ||
+    ORG_WORDS.test(description);
   if (!isOrg) return { rejected: "not an organization" };
 
   let score = 1;
@@ -187,10 +195,11 @@ export function resolveCompany(
   candidates: WikidataEntity[],
   countryLabels: ReadonlyMap<string, string>,
   context: string,
+  classLabels: ReadonlyMap<string, string> = new Map(),
 ): Resolution {
   if (candidates.length === 0) return { status: "unresolved", reason: "no Wikidata candidates" };
   const scored = candidates
-    .map((c) => scoreCandidate(company, c, countryLabels, context))
+    .map((c) => scoreCandidate(company, c, countryLabels, context, classLabels))
     .filter((m): m is CandidateMatch => "entity" in m)
     .sort((a, b) => b.score - a.score);
   if (scored.length === 0) return { status: "unresolved", reason: "no candidate matched" };

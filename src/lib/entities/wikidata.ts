@@ -32,13 +32,19 @@ export async function searchOrganizations(name: string): Promise<string[]> {
   const { response } = await withCache("wikidata", { op: "search", name: name.toLowerCase() }, TTL_SECONDS, () =>
     get({ action: "query", list: "search", srsearch: `${name} ${ORG_FILTER}`, srnamespace: "0", srlimit: "5" }),
   );
-  const hits = ((response as { query?: { search?: { title?: unknown }[] } })?.query?.search ?? []).map((h) => h.title).filter(isQid);
-  if (hits.length) return hits;
+  const orgHits = ((response as { query?: { search?: { title?: unknown }[] } })?.query?.search ?? []).map((h) => h.title).filter(isQid);
 
+  // The org-restricted full-text search can come back non-empty but wrong
+  // (it ranks loosely on description text, so a common word like "Wise"
+  // matches unrelated pages before the actual company). A plain label
+  // search is always run too and merged in; scoreCandidate's name and
+  // organization checks reject anything that doesn't actually fit.
   const { response: labels } = await withCache("wikidata", { op: "label-search", name: name.toLowerCase() }, TTL_SECONDS, () =>
     get({ action: "wbsearchentities", search: name, language: "en", uselang: "en", type: "item", limit: "5" }),
   );
-  return ((labels as { search?: { id?: unknown }[] })?.search ?? []).map((h) => h.id).filter(isQid);
+  const labelHits = ((labels as { search?: { id?: unknown }[] })?.search ?? []).map((h) => h.id).filter(isQid);
+
+  return [...new Set([...orgHits, ...labelHits])];
 }
 
 async function getEntitiesRaw(ids: string[], props: string): Promise<Json[]> {

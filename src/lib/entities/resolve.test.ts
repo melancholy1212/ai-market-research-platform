@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import fixture from "./__fixtures__/wikidata-entities.json";
-import { parseWikidataEntities, resolveCompany, type CompanyToResolve } from "./resolve";
+import { parseWikidataEntities, resolveCompany, scoreCandidate, type CompanyToResolve } from "./resolve";
 
 // Real Wikidata records (trimmed): two "CRED"s, a Danish "XFlow", Darktrace,
 // Cashfree Payments and a Hungarian "NAVI".
@@ -11,6 +11,7 @@ const pick = (...ids: string[]) => ids.map((id) => byId.get(id)!);
 const countries = new Map([
   ["Q668", "India"], ["Q30", "United States"], ["Q35", "Denmark"], ["Q145", "United Kingdom"], ["Q28", "Hungary"],
 ]);
+
 const company = (over: Partial<CompanyToResolve>): CompanyToResolve => ({ name: "", country: null, focus: null, domain: null, ...over });
 const INDIA_FINTECH = "Fintech startups in India";
 
@@ -30,7 +31,30 @@ describe("parseWikidataEntities", () => {
   });
 });
 
+// Instance-of class labels for the Wikidata classes these fixtures use,
+// e.g. Q1194970 "dot-com company" (Wise's actual class, not in the fixed
+// ORG_CLASSES list).
+const classLabels = new Map([
+  ["Q1194970", "dot-com company"],
+  ["Q986008", "payment system"],
+]);
+
 describe("resolveCompany", () => {
+  it("recognizes a narrow Wikidata organization class by its label, not just by id", () => {
+    const wise = byId.get("Q7833987")!;
+    expect(wise.instanceOf).toEqual(expect.arrayContaining(["Q1194970"]));
+    expect(scoreCandidate(company({ name: "Wise" }), wise, countries, "", classLabels)).not.toMatchObject({ rejected: "not an organization" });
+  });
+
+  it("resolves Wise in the UK despite the org-restricted search returning unrelated candidates", () => {
+    // Real bug: full-text search restricted to org classes returned 5
+    // unrelated pages for the generic word "Wise", so the label-search
+    // fallback (always merged in) is what finds the actual company.
+    const r = resolveCompany(company({ name: "Wise", country: "United Kingdom" }), pick("Q7833987"), countries, "", classLabels);
+    expect(r.status).toBe("resolved");
+    if (r.status === "resolved") expect(r.match.entity.id).toBe("Q7833987");
+  });
+
   it("resolves CRED in India and ignores the same-named US company", () => {
     const r = resolveCompany(company({ name: "CRED", country: "India", focus: "Consumer credit and rewards platform" }), pick("Q106455641", "Q135209797"), countries, INDIA_FINTECH);
     expect(r.status).toBe("resolved");

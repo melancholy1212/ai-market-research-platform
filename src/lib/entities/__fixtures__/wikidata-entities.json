@@ -1,651 +1,896 @@
 {
-  "entities": {
-    "Q106455641": {
-      "id": "Q106455641",
-      "labels": {
-        "en": {
-          "language": "en",
-          "value": "CRED"
-        }
-      },
-      "aliases": {},
-      "descriptions": {
-        "en": {
-          "language": "en",
-          "value": "Indian financial services company"
-        }
-      },
-      "claims": {
-        "P31": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 4830453,
-                  "id": "Q4830453"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P856": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": "https://cred.club/",
-                "type": "string"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P17": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 668,
-                  "id": "Q668"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P571": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "time": "+2018-00-00T00:00:00Z",
-                  "timezone": 0,
-                  "before": 0,
-                  "after": 0,
-                  "precision": 9,
-                  "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
-                },
-                "type": "time"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P159": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 1355,
-                  "id": "Q1355"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P452": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 16319025,
-                  "id": "Q16319025"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ]
-      }
-    },
-    "Q135209797": {
-      "id": "Q135209797",
-      "labels": {
-        "en": {
-          "language": "en",
-          "value": "CREDX USA"
-        }
-      },
-      "aliases": {
-        "en": [
-          {
-            "language": "en",
-            "value": "CREDX"
-          },
-          {
-            "language": "en",
-            "value": "CredX USA"
-          },
-          {
-            "language": "en",
-            "value": "CREDX Fintech"
-          },
-          {
-            "language": "en",
-            "value": "CREDX USA Inc"
-          },
-          {
-            "language": "en",
-            "value": "CredX App"
-          },
-          {
-            "language": "en",
-            "value": "DADI NAVEEN"
-          },
-          {
-            "language": "en",
-            "value": "CEO"
-          },
-          {
-            "language": "en",
-            "value": "FOUNDER"
-          },
-          {
-            "language": "en",
-            "value": "DADICREDIT CARD BILL PAYMENTS APP"
-          },
-          {
-            "language": "en",
-            "value": "CREDIT CARD"
-          },
-          {
-            "language": "en",
-            "value": "CREDIT"
-          },
-          {
-            "language": "en",
-            "value": "UTILITIES BILL PAYMENTS"
-          },
-          {
-            "language": "en",
-            "value": "RENT"
-          }
-        ]
-      },
-      "descriptions": {
-        "en": {
-          "language": "en",
-          "value": "U.S.-based fintech company focused on AI-powered credit and bill management"
-        }
-      },
-      "claims": {
-        "P31": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 4830453,
-                  "id": "Q4830453"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P452": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 16319025,
-                  "id": "Q16319025"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P17": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 30,
-                  "id": "Q30"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P571": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "time": "+2023-00-00T00:00:00Z",
-                  "timezone": 0,
-                  "before": 0,
-                  "after": 0,
-                  "precision": 9,
-                  "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
-                },
-                "type": "time"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P856": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": "https://credxusa.com",
-                "type": "string"
-              }
-            },
-            "rank": "normal"
-          }
-        ]
-      }
-    },
-    "Q134963253": {
-      "id": "Q134963253",
-      "labels": {
-        "en": {
-          "language": "en",
-          "value": "XFlow"
-        }
-      },
-      "aliases": {
-        "en": [
-          {
-            "language": "en",
-            "value": "Visma XFlow, XFlow ApS, XFlow Denmark, XFlow part of Visma, XFlow Visma"
-          }
-        ]
-      },
-      "descriptions": {
-        "en": {
-          "language": "en",
-          "value": "Danish software provider of digital solutions for municipalities, regions, public authorities, and selected private organizations"
-        }
-      },
-      "claims": {
-        "P31": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 1058914,
-                  "id": "Q1058914"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P17": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 35,
-                  "id": "Q35"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P159": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 5964801,
-                  "id": "Q5964801"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P856": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": "https://www.xflow.dk",
-                "type": "string"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P452": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 880371,
-                  "id": "Q880371"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ]
-      }
-    },
-    "Q27907429": {
-      "id": "Q27907429",
-      "labels": {
-        "en": {
-          "language": "en",
-          "value": "Darktrace"
-        }
-      },
-      "aliases": {},
-      "descriptions": {
-        "en": {
-          "language": "en",
-          "value": "British cyber security company"
-        }
-      },
-      "claims": {
-        "P17": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 145,
-                  "id": "Q145"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P31": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 4830453,
-                  "id": "Q4830453"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P571": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "time": "+2013-00-00T00:00:00Z",
-                  "timezone": 0,
-                  "before": 0,
-                  "after": 0,
-                  "precision": 9,
-                  "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
-                },
-                "type": "time"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P159": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 350,
-                  "id": "Q350"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P856": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": "https://www.darktrace.com",
-                "type": "string"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P452": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 124102257,
-                  "id": "Q124102257"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ]
-      }
-    },
-    "Q134715663": {
-      "id": "Q134715663",
-      "labels": {
-        "en": {
-          "language": "en",
-          "value": "Cashfree Payments"
-        }
-      },
-      "aliases": {
-        "en": [
-          {
-            "language": "en",
-            "value": "Cashfree"
-          }
-        ]
-      },
-      "descriptions": {
-        "en": {
-          "language": "en",
-          "value": "Indian payment gateway company"
-        }
-      },
-      "claims": {
-        "P31": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 783794,
-                  "id": "Q783794"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P452": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 986008,
-                  "id": "Q986008"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P571": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "time": "+2015-00-00T00:00:00Z",
-                  "timezone": 0,
-                  "before": 0,
-                  "after": 0,
-                  "precision": 9,
-                  "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
-                },
-                "type": "time"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P17": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 668,
-                  "id": "Q668"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P159": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 1355,
-                  "id": "Q1355"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P856": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": "https://www.cashfree.com/",
-                "type": "string"
-              }
-            },
-            "rank": "normal"
-          }
-        ]
-      }
-    },
-    "Q102324384": {
-      "id": "Q102324384",
-      "labels": {
-        "en": {
-          "language": "en",
-          "value": "NAVI"
-        }
-      },
-      "aliases": {},
-      "descriptions": {
-        "en": {
-          "language": "en",
-          "value": "Hungarian company"
-        }
-      },
-      "claims": {
-        "P159": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 1781,
-                  "id": "Q1781"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P17": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 28,
-                  "id": "Q28"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ],
-        "P31": [
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 4830453,
-                  "id": "Q4830453"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          },
-          {
-            "mainsnak": {
-              "datavalue": {
-                "value": {
-                  "entity-type": "item",
-                  "numeric-id": 6881511,
-                  "id": "Q6881511"
-                },
-                "type": "wikibase-entityid"
-              }
-            },
-            "rank": "normal"
-          }
-        ]
-      }
+ "entities": {
+  "Q106455641": {
+   "id": "Q106455641",
+   "labels": {
+    "en": {
+     "language": "en",
+     "value": "CRED"
     }
+   },
+   "aliases": {},
+   "descriptions": {
+    "en": {
+     "language": "en",
+     "value": "Indian financial services company"
+    }
+   },
+   "claims": {
+    "P31": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 4830453,
+         "id": "Q4830453"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P856": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": "https://cred.club/",
+        "type": "string"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P17": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 668,
+         "id": "Q668"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P571": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "time": "+2018-00-00T00:00:00Z",
+         "timezone": 0,
+         "before": 0,
+         "after": 0,
+         "precision": 9,
+         "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+        },
+        "type": "time"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P159": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 1355,
+         "id": "Q1355"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P452": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 16319025,
+         "id": "Q16319025"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ]
+   }
+  },
+  "Q135209797": {
+   "id": "Q135209797",
+   "labels": {
+    "en": {
+     "language": "en",
+     "value": "CREDX USA"
+    }
+   },
+   "aliases": {
+    "en": [
+     {
+      "language": "en",
+      "value": "CREDX"
+     },
+     {
+      "language": "en",
+      "value": "CredX USA"
+     },
+     {
+      "language": "en",
+      "value": "CREDX Fintech"
+     },
+     {
+      "language": "en",
+      "value": "CREDX USA Inc"
+     },
+     {
+      "language": "en",
+      "value": "CredX App"
+     },
+     {
+      "language": "en",
+      "value": "DADI NAVEEN"
+     },
+     {
+      "language": "en",
+      "value": "CEO"
+     },
+     {
+      "language": "en",
+      "value": "FOUNDER"
+     },
+     {
+      "language": "en",
+      "value": "DADICREDIT CARD BILL PAYMENTS APP"
+     },
+     {
+      "language": "en",
+      "value": "CREDIT CARD"
+     },
+     {
+      "language": "en",
+      "value": "CREDIT"
+     },
+     {
+      "language": "en",
+      "value": "UTILITIES BILL PAYMENTS"
+     },
+     {
+      "language": "en",
+      "value": "RENT"
+     }
+    ]
+   },
+   "descriptions": {
+    "en": {
+     "language": "en",
+     "value": "U.S.-based fintech company focused on AI-powered credit and bill management"
+    }
+   },
+   "claims": {
+    "P31": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 4830453,
+         "id": "Q4830453"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P452": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 16319025,
+         "id": "Q16319025"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P17": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 30,
+         "id": "Q30"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P571": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "time": "+2023-00-00T00:00:00Z",
+         "timezone": 0,
+         "before": 0,
+         "after": 0,
+         "precision": 9,
+         "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+        },
+        "type": "time"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P856": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": "https://credxusa.com",
+        "type": "string"
+       }
+      },
+      "rank": "normal"
+     }
+    ]
+   }
+  },
+  "Q134963253": {
+   "id": "Q134963253",
+   "labels": {
+    "en": {
+     "language": "en",
+     "value": "XFlow"
+    }
+   },
+   "aliases": {
+    "en": [
+     {
+      "language": "en",
+      "value": "Visma XFlow, XFlow ApS, XFlow Denmark, XFlow part of Visma, XFlow Visma"
+     }
+    ]
+   },
+   "descriptions": {
+    "en": {
+     "language": "en",
+     "value": "Danish software provider of digital solutions for municipalities, regions, public authorities, and selected private organizations"
+    }
+   },
+   "claims": {
+    "P31": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 1058914,
+         "id": "Q1058914"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P17": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 35,
+         "id": "Q35"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P159": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 5964801,
+         "id": "Q5964801"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P856": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": "https://www.xflow.dk",
+        "type": "string"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P452": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 880371,
+         "id": "Q880371"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ]
+   }
+  },
+  "Q27907429": {
+   "id": "Q27907429",
+   "labels": {
+    "en": {
+     "language": "en",
+     "value": "Darktrace"
+    }
+   },
+   "aliases": {},
+   "descriptions": {
+    "en": {
+     "language": "en",
+     "value": "British cyber security company"
+    }
+   },
+   "claims": {
+    "P17": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 145,
+         "id": "Q145"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P31": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 4830453,
+         "id": "Q4830453"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P571": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "time": "+2013-00-00T00:00:00Z",
+         "timezone": 0,
+         "before": 0,
+         "after": 0,
+         "precision": 9,
+         "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+        },
+        "type": "time"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P159": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 350,
+         "id": "Q350"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P856": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": "https://www.darktrace.com",
+        "type": "string"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P452": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 124102257,
+         "id": "Q124102257"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ]
+   }
+  },
+  "Q134715663": {
+   "id": "Q134715663",
+   "labels": {
+    "en": {
+     "language": "en",
+     "value": "Cashfree Payments"
+    }
+   },
+   "aliases": {
+    "en": [
+     {
+      "language": "en",
+      "value": "Cashfree"
+     }
+    ]
+   },
+   "descriptions": {
+    "en": {
+     "language": "en",
+     "value": "Indian payment gateway company"
+    }
+   },
+   "claims": {
+    "P31": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 783794,
+         "id": "Q783794"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P452": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 986008,
+         "id": "Q986008"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P571": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "time": "+2015-00-00T00:00:00Z",
+         "timezone": 0,
+         "before": 0,
+         "after": 0,
+         "precision": 9,
+         "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+        },
+        "type": "time"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P17": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 668,
+         "id": "Q668"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P159": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 1355,
+         "id": "Q1355"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P856": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": "https://www.cashfree.com/",
+        "type": "string"
+       }
+      },
+      "rank": "normal"
+     }
+    ]
+   }
+  },
+  "Q102324384": {
+   "id": "Q102324384",
+   "labels": {
+    "en": {
+     "language": "en",
+     "value": "NAVI"
+    }
+   },
+   "aliases": {},
+   "descriptions": {
+    "en": {
+     "language": "en",
+     "value": "Hungarian company"
+    }
+   },
+   "claims": {
+    "P159": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 1781,
+         "id": "Q1781"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P17": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 28,
+         "id": "Q28"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P31": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 4830453,
+         "id": "Q4830453"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 6881511,
+         "id": "Q6881511"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ]
+   }
+  },
+  "Q7833987": {
+   "id": "Q7833987",
+   "labels": {
+    "en": {
+     "language": "en",
+     "value": "Wise"
+    }
+   },
+   "aliases": {
+    "en": [
+     {
+      "language": "en",
+      "value": "Wise Ltd."
+     }
+    ]
+   },
+   "descriptions": {
+    "en": {
+     "language": "en",
+     "value": "British online money transfer service"
+    }
+   },
+   "claims": {
+    "P31": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 1194970,
+         "id": "Q1194970"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 986008,
+         "id": "Q986008"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P571": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "time": "+2011-00-00T00:00:00Z",
+         "timezone": 0,
+         "before": 0,
+         "after": 0,
+         "precision": 9,
+         "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+        },
+        "type": "time"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P856": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": "https://wise.com/",
+        "type": "string"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P159": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 84,
+         "id": "Q84"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P17": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 145,
+         "id": "Q145"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ],
+    "P452": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 837171,
+         "id": "Q837171"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 43015,
+         "id": "Q43015"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 43183,
+         "id": "Q43183"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ]
+   }
+  },
+  "Q1194970": {
+   "id": "Q1194970",
+   "labels": {
+    "en": {
+     "language": "en",
+     "value": "dot-com company"
+    }
+   },
+   "aliases": {
+    "en": [
+     {
+      "language": "en",
+      "value": "dotcom"
+     },
+     {
+      "language": "en",
+      "value": "internet company"
+     },
+     {
+      "language": "en",
+      "value": "dotcom company"
+     },
+     {
+      "language": "en",
+      "value": "dot-com companies"
+     },
+     {
+      "language": "en",
+      "value": "dotcoms"
+     },
+     {
+      "language": "en",
+      "value": "internet companies"
+     },
+     {
+      "language": "en",
+      "value": "dotcom companies"
+     }
+    ]
+   },
+   "descriptions": {
+    "en": {
+     "language": "en",
+     "value": "type of company"
+    }
+   },
+   "claims": {
+    "P452": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 56611700,
+         "id": "Q56611700"
+        },
+        "type": "wikibase-entityid"
+       }
+      },
+      "rank": "normal"
+     }
+    ]
+   }
+  },
+  "Q986008": {
+   "id": "Q986008",
+   "labels": {
+    "en": {
+     "language": "en",
+     "value": "payment system"
+    }
+   },
+   "aliases": {
+    "en": [
+     {
+      "language": "en",
+      "value": "payments system"
+     },
+     {
+      "language": "en",
+      "value": "form of payment"
+     }
+    ]
+   },
+   "descriptions": {
+    "en": {
+     "language": "en",
+     "value": "system used to transfer monetary value, including institutions, instruments, people, rules, procedures, standards, and technologies"
+    }
+   },
+   "claims": {}
   }
+ }
 }

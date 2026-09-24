@@ -117,10 +117,14 @@ export async function resolveCompanies(
   });
   const byId = new Map(entities.map((e) => [e.id, e]));
   const countryLabels = await getLabels(entities.flatMap((e) => e.countryIds)).catch(() => new Map<string, string>());
+  // Labels for each candidate's instanceOf classes, so an organization type
+  // Wikidata models narrowly ("dot-com company", "fintech company") is still
+  // recognized without listing every such class by id.
+  const classLabels = await getLabels(entities.flatMap((e) => e.instanceOf)).catch(() => new Map<string, string>());
 
   const resolved: ResolvedCompany[] = companies.map((company, i) => {
     const candidates = candidateIds[i].map((id) => byId.get(id)).filter((e) => e !== undefined);
-    const r = resolveCompany(company, candidates, countryLabels, context);
+    const r = resolveCompany(company, candidates, countryLabels, context, classLabels);
 
     const match = r.status === "resolved" ? r.match : null;
     const wikidataCountry =
