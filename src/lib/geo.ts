@@ -96,3 +96,14 @@ export function findPlaces(text: string): string[] {
   const names = [...Object.keys(DEMONYMS), ...Object.keys(COUNTRY_ALIASES), ...Object.keys(REGIONS)];
   return [...new Set(names.filter((n) => mentionsPhrase(text, n)).map((n) => (REGIONS[n] ? n : normCountry(n))))];
 }
+
+// Countries whose name, demonym or a major city of theirs is mentioned in a
+// text ("Tokyo-based startup" -> ["japan"]), unlike findPlaces, which only
+// catches a country's own name. Used to read a country off free text (an
+// article's title and snippet), not a research question.
+export function countriesMentioned(text: string): string[] {
+  return Object.keys(DEMONYMS).filter((country) => placePhrases(country).some((phrase) => mentionsPhrase(text, phrase)));
+}
+
+// Display form of a normalized place name: "united states" -> "United States".
+export const displayPlace = (p: string) => p.replace(/\b\p{L}/gu, (c) => c.toUpperCase());

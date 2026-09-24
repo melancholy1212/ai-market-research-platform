@@ -89,7 +89,7 @@ Rules:
 - A trend must be supported by at least two sources.
 - Limits: at most ${LIMITS.keyFindings} key findings, ${LIMITS.companies} companies, ${LIMITS.developments} developments, ${LIMITS.trends} trends. Fewer is fine; do not pad.
 - Classify each company's entity_type from concrete evidence its cited sources state about IT SPECIFICALLY, never from the name, and never merely from being named on a "top startups"/"best companies" list (a mature, publicly listed company can still appear on such a list with no distinguishing detail given). Look for a stated founding year, funding round or stage (seed/Series A-D...), employee count, "IPO"/"publicly listed"/"plc"/stock exchange, or being called decades old or a well-known incumbent. startup = sources state it is young and venture-funded, pre-IPO; established_company = sources state it is mature, publicly listed, or a well-known incumbent; investor = VC fund or investment firm; partner = organization mentioned mainly as a customer or collaborator; research_institution = university or lab; other = the sources give no real evidence of company stage either way (e.g. it is only named in a list with no distinguishing detail). When the only evidence is a bare listing, choose other, not startup.
-- If the question asks for a kind of organization (e.g. startups), list those first; include other kinds only when they play a clear role, and never label them as that kind.
+- If the question asks for a kind of organization (e.g. startups), list those first; include other kinds only when they play a clear role, and never label them as that kind. When the overview or key findings mention an organization that is not of the requested kind (an incumbent, investor or partner named for context), say so explicitly ("incumbent Renesas", "investor Sequoia") rather than writing about it the way you would the requested kind.
 - Sources marked [context] are background: use them for the overview and trends, but base companies and developments mainly on the other sources.
 - Write in English, plainly, without marketing language.`;
 
@@ -106,7 +106,7 @@ const PROMPT_OVERHEAD_TOKENS = 1_500;
 // token budget is used; with a small budget, snippets are shortened so more
 // sources fit.
 export function buildAnalysisPrompt(
-  research: { query: string; focus: string | null },
+  research: { query: string; focus: string | null; requestedType?: string | null },
   sources: AnalysisSource[],
   maxInputTokens = 30_000,
 ): { prompt: string; aliases: Map<string, string>; included: AnalysisSource[] } {
@@ -138,6 +138,7 @@ export function buildAnalysisPrompt(
   const prompt = [
     `Research question: ${research.query}`,
     research.focus ? `Focus: ${research.focus}` : null,
+    research.requestedType ? `Requested kind of organization: ${research.requestedType}` : null,
     "",
     `Sources (${lines.length}):`,
     ...lines,

@@ -55,6 +55,12 @@ describe("buildAnalysisPrompt", () => {
     expect(prompt).toContain("[S3] Secfix raises $12M | Tech.eu | tech.eu");
     expect([...aliases]).toEqual([["S1", "uuid-1"], ["S2", "uuid-2"], ["S3", "uuid-3"]]);
   });
+
+  it("tells the model the requested kind of organization, when the question asks for one", () => {
+    const withType = buildAnalysisPrompt({ query: "q", focus: null, requestedType: "startups" }, sources);
+    expect(withType.prompt).toContain("Requested kind of organization: startups");
+    expect(prompt).not.toContain("Requested kind of organization");
+  });
 });
 
 describe("parseAnalysis", () => {

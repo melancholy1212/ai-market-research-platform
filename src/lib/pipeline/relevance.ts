@@ -1,4 +1,4 @@
-import { findPlaces, mentionsPhrase, normCountry, placePhrases, REGIONS } from "@/lib/geo";
+import { displayPlace, findPlaces, mentionsPhrase, normCountry, placePhrases, REGIONS } from "@/lib/geo";
 import { OUTLET_REGIONS } from "@/lib/providers/rss-sites";
 import { displayHost } from "@/lib/url";
 
@@ -89,8 +89,7 @@ export function offPurposeReason(title: string | null, url: string): string | nu
   return match?.reason ?? null;
 }
 
-// Display forms for reasons: "Germany", "United States", "AI".
-const displayPlace = (p: string) => p.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
+// Display form for a term in a reason: "AI".
 const displayTerm = (t: string) => (ACRONYMS.has(t) ? t.toUpperCase() : t);
 
 export type RelevanceContext = {

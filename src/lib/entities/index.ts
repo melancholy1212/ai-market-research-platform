@@ -1,5 +1,6 @@
 import "server-only";
 
+import { countriesMentioned, displayPlace } from "@/lib/geo";
 import { ProviderError } from "@/lib/http";
 import type { Analysis } from "@/lib/pipeline/analysis";
 
@@ -82,10 +83,14 @@ async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise
 
 // `sourceUrls` maps each cited source id to the URLs of every outlet that
 // reported that story, for judging coverage in verification confidence.
+// `sourceTexts` maps each cited source id to its title and snippet, for
+// reading a company's country off its evidence when neither the AI
+// extraction nor Wikidata gave one.
 export async function resolveCompanies(
   companies: ExtractedCompany[],
   context: string,
   sourceUrls: ReadonlyMap<string, string[]> = new Map(),
+  sourceTexts: ReadonlyMap<string, string> = new Map(),
   timeBudgetMs = TIME_BUDGET_MS,
 ) {
   const deadline = Date.now() + timeBudgetMs;
@@ -131,6 +136,12 @@ export async function resolveCompanies(
       match?.matchedCountry ?? match?.entity.countryIds.map((id) => countryLabels.get(id)).find(Boolean) ?? null;
     const wikidataDomain = match?.entity.websites.map(registrableDomain).find(Boolean) ?? null;
     const domain = company.domain ?? wikidataDomain;
+    // Last resort: a country named in the company's own cited evidence
+    // ("Tokyo-based GITAI"), only when exactly one is mentioned there.
+    // Several distinct countries mean the text is ambiguous or about more
+    // than one place, so the company is left without one rather than guessed.
+    const evidenceCountries = countriesMentioned(company.sourceIds.map((id) => sourceTexts.get(id)).filter(Boolean).join(" "));
+    const country = wikidataCountry ?? company.country ?? (evidenceCountries.length === 1 ? displayPlace(evidenceCountries[0]) : null);
     const type = reconcileEntityType(
       company.entityType,
       company.typeEvidence,
@@ -144,7 +155,7 @@ export async function resolveCompanies(
       // Filled in once websites and merges are settled.
       verification: { confidence: "low" as const, signals: [] },
       // Structured data wins over text extraction when the match is confident.
-      country: wikidataCountry ?? company.country,
+      country,
       domain,
       names: [company.name],
       websiteSource: company.domain ? "sources" : wikidataDomain ? "wikidata" : null,

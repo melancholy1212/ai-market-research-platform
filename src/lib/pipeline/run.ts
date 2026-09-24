@@ -36,6 +36,16 @@ import { buildSearchPlan, type SearchTask } from "./plan";
 
 const PROVIDERS: Record<string, SearchProvider> = { [tavily.id]: tavily, [rssSearch.id]: rssSearch };
 
+// Human phrasing of the question's entity-type constraint, given to the
+// analysis prompt so it can tell the requested kind of organization apart
+// from others it mentions for context.
+const REQUESTED_TYPE_LABEL: Partial<Record<QueryConstraints["entityType"], string>> = {
+  startup: "startups",
+  established_company: "established companies",
+  investor: "investors",
+  research_institution: "research institutions",
+};
+
 // The most informative source of a story should be its primary: found by
 // more searches, dated, with a snippet, then news before web.
 function primaryFirst(a: NormalizedSource, b: NormalizedSource): number {
@@ -477,6 +487,16 @@ export async function runResearch(researchId: string): Promise<void> {
     const storyUrls = new Map(
       analysisGroups.map(({ g }) => [primaryIds.get(g.primary.canonicalUrl)!, [g.primary.url, ...g.duplicates.map((d) => d.source.url)]]),
     );
+    // Every story's title and snippet, so a company's country can be read off
+    // its own cited evidence when neither the AI nor Wikidata gave one.
+    const storyText = new Map(
+      analysisGroups.map(({ g }) => [
+        primaryIds.get(g.primary.canonicalUrl)!,
+        [g.primary.title, g.primary.snippet, ...g.duplicates.flatMap((d) => [d.source.title, d.source.snippet])]
+          .filter(Boolean)
+          .join(" "),
+      ]),
+    );
 
     if (analysisSources.length === 0) {
       await log("analyzing", "No sources to analyze.", "warning");
@@ -487,8 +507,9 @@ export async function runResearch(researchId: string): Promise<void> {
       await log("analyzing", `Analyzing ${plural(analysisSources.length, "relevant source")} with AI…`);
       try {
         let sourcesAnalyzed = 0;
+        const requestedType = REQUESTED_TYPE_LABEL[constraints.entityType] ?? null;
         const result = await generateWithFallback(providers, (provider) => {
-          const { prompt, aliases, included } = buildAnalysisPrompt(research, analysisSources, provider.maxInputTokens);
+          const { prompt, aliases, included } = buildAnalysisPrompt({ ...research, requestedType }, analysisSources, provider.maxInputTokens);
           sourcesAnalyzed = included.length;
           return {
             request: { system: ANALYSIS_SYSTEM, prompt, schema: ANALYSIS_SCHEMA, schemaName: "research_analysis", maxOutputTokens: 8192 },
@@ -529,7 +550,12 @@ export async function runResearch(researchId: string): Promise<void> {
         if (analysis.companies.length > 0) {
           await setStatus("resolving");
           try {
-            ({ companies, stats: resolution } = await resolveCompanies(analysis.companies, `${research.query} ${research.focus ?? ""}`, storyUrls));
+            ({ companies, stats: resolution } = await resolveCompanies(
+              analysis.companies,
+              `${research.query} ${research.focus ?? ""}`,
+              storyUrls,
+              storyText,
+            ));
             await log("resolving", describeResolution(resolution, companies), "info", resolution);
             if (resolution.searchUnavailable) {
               await log("resolving", "Web search for company websites was unavailable; some websites may be missing.", "warning");

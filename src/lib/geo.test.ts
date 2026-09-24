@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { findPlaces, mentionsPhrase, placePhrases } from "./geo";
+import { countriesMentioned, findPlaces, mentionsPhrase, placePhrases } from "./geo";
 
 describe("mentionsPhrase", () => {
   it("matches whole words, case-insensitively for longer phrases", () => {
@@ -27,5 +27,21 @@ describe("placePhrases / findPlaces", () => {
     expect(findPlaces("Cybersecurity startups in Europe")).toEqual(["europe"]);
     expect(findPlaces("AI startups in the US")).toEqual(["united states"]);
     expect(findPlaces("Tell us about robotics")).toEqual([]);
+  });
+});
+
+describe("countriesMentioned", () => {
+  it("reads a country off a demonym or city, unlike findPlaces", () => {
+    expect(countriesMentioned("Tokyo-based GITAI raised a new round")).toEqual(["japan"]);
+    expect(findPlaces("Tokyo-based GITAI raised a new round")).toEqual([]);
+    expect(countriesMentioned("The Indian fintech expanded")).toEqual(["india"]);
+  });
+  it("returns every country mentioned, so callers can require exactly one", () => {
+    expect(countriesMentioned("The Tokyo firm opened a Los Angeles office")).toEqual(
+      expect.arrayContaining(["japan", "united states"]),
+    );
+  });
+  it("finds nothing when no known place is mentioned", () => {
+    expect(countriesMentioned("A new robotics platform launched")).toEqual([]);
   });
 });
