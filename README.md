@@ -1,27 +1,99 @@
 # AI Market Research Platform
 
-Turns a natural-language market research question into a structured,
-source-backed research report: companies, recent developments, and emerging
-trends, with every finding traceable to the sources that support it.
+**[Live demo →](https://ai-market-research-platform-omega.vercel.app/)**
 
-> **Status: working MVP.** Research runs collect real sources from web and
-> news search, deduplicate them, and produce a source-backed AI analysis
-> (overview, companies, developments, trends) where every claim links to the
-> sources that support it. Nothing in the app is mocked.
+An AI-powered market research system that turns natural-language research
+questions into structured, source-backed reports using multi-source web
+research, relevance classification, entity verification, and
+evidence-grounded AI analysis. Every finding in a report links back to the
+sources that support it, and nothing in the app is mocked: research runs
+collect real sources, classify and analyze them with real AI providers, and
+resolve companies against real external data.
 
-## Planned pipeline
+## What this demonstrates
+
+- Multi-provider web research pipelines (Tavily web/news search, plus seven
+  curated news-site RSS feeds)
+- LLM-based classification and structured extraction
+- Evidence-grounded AI generation, with citations validated in code, not
+  trusted from the model
+- Source deduplication and story grouping across outlets
+- Constraint-aware relevance filtering (topic, geography, entity type,
+  industry, time range)
+- Entity classification and verification against Wikidata and other sources
+- Supabase/Postgres persistence, including a transactional save function
+- Resilient API handling and fallbacks across every external dependency
+- Background research execution with a live, per-stage progress log
+- Structured JSON outputs enforced by schema and validated after the fact
+- Next.js / TypeScript full-stack development
+
+## Architecture
 
 ```
-question → plan → collect sources → normalize → deduplicate
-        → resolve entities → filter for relevance → store
-        → AI analysis → source-backed report → dashboard
+User question
+      │
+      ▼
+Search planner — web + news search, plus a focused search when given
+      │
+      ▼
+Collect — Tavily (web/news) + 7 curated news-site RSS feeds, concurrently
+      │
+      ▼
+Normalize + deduplicate — clean URLs/titles, group the same story across outlets
+      │
+      ▼
+Constraint extraction — topic, geography, entity type, industry, time range
+      │
+      ▼
+AI relevance classifier (deterministic keyword scorer as fallback)
+      │
+      ├── Direct       — about the question's topic, place and kind of organization
+      ├── Contextual   — useful background, sent to analysis marked as such
+      └── Irrelevant   — kept for auditing, not analyzed
+      │
+      ▼
+Filtered story set (direct + contextual primaries)
+      │
+      ▼
+AI synthesis — one call: overview, companies, developments, trends
+      (Gemini first, Groq as fallback)
+      │
+      ▼
+Entity resolution — Wikidata match, Clearbit/Tavily website discovery,
+      multi-signal verification confidence
+      │
+      ▼
+Evidence-backed report — every claim validated against real source citations
+      │
+      ▼
+Supabase (Postgres) — persisted in one transaction
 ```
 
-The LLM is used only where language reasoning is needed (planning,
-extraction, classification, synthesis). URL normalization, deduplication,
-validation and storage are deterministic code.
+## Example research
 
-## How a research run works today
+Research question: **"Robotics startups in Japan"**
+
+| Stage | Count |
+| --- | --- |
+| Results collected | 56 |
+| Unique stories (after dedup) | 56 |
+| Direct | 8 |
+| Contextual | 13 |
+| Filtered out (irrelevant) | 35 |
+| Sent to AI analysis | 21 |
+| Companies identified | 15 |
+
+Sources unrelated to Japan — Indian funding round-ups (Inc42), African tech
+newsletters (TechCabal), Australian startup news (Startup Daily), and
+China/Korea-focused robotics stories — were filtered out as irrelevant,
+while Japan-specific context (Nvidia's partnerships with Japanese firms,
+McKinsey's analysis of Japan's robotics market) was kept as contextual. The
+15 companies identified split into startups (Rapyuta Robotics, Tron K.K.,
+GITAI) and established incumbents named for context (Fanuc, Yaskawa
+Electric, Kawasaki Robotics), each labelled and evidenced separately rather
+than presented the same way.
+
+## How a research run works
 
 Submitting a question creates a `pending` research and redirects to its page.
 The run then executes in the background of that request (Next.js `after()`,
@@ -33,10 +105,14 @@ within Vercel's 300s function limit) and reports progress as it goes:
    rate limits, exhausted quotas and malformed responses are caught per
    search, logged in plain language, and the run continues with whatever
    succeeded. It fails only if every source fails.
-3. **Process**: exact duplicates, normalization, then story grouping (see
-   below).
+3. **Process**: exact duplicates, normalization, story grouping (see below),
+   constraint extraction, and AI relevance classification into direct,
+   contextual and irrelevant (see Relevance filtering below).
 4. **Store**: sources are upserted with a unique constraint on
    `(research_id, canonical_url)`, so exact duplicates cannot slip in.
+5. **Analyze** and **resolve**: the filtered sources are synthesized into a
+   report and its companies resolved against real external data (see AI
+   analysis and Entity resolution below).
 
 Each stage writes to `research_events`, which the page shows as a live run
 log. The page refreshes itself while the run is active.
@@ -100,8 +176,9 @@ All deterministic; no LLM involved.
 
 Keyword search returns plenty of sources that only *mention* a query word
 (Australian funding round-ups and African tech newsletters for "Robotics
-startups in Japan"). Between deduplication and analysis, every story is
-classified by the AI against the question's constraints:
+startups in Japan" — see Example research above). Between deduplication and
+analysis, every story is classified by the AI against the question's
+constraints:
 
 - The classifier first extracts the constraints: **topic, geography, entity
   type** (startup, established company, investor...), **industry** and
@@ -123,10 +200,10 @@ classified by the AI against the question's constraints:
   outlets) labels the rest, and the run log says so. A classification
   failure never loses the run.
 
-On a real run of "Robotics startups in Japan": 50 stories, 8 direct, 14
-contextual (Japanese robotics industry news, Nvidia's partnerships with
-Japanese firms), 28 irrelevant (every Indian, African and Australian
-source, and Chinese/Korean robotics startups).
+This is not simple keyword filtering: the keyword scorer only stands in when
+the AI is unavailable, and the AI classification itself reasons about the
+question's actual constraints (topic, geography, entity type, industry,
+time range) rather than matching literal words.
 
 ## Company classification, verification and ordering
 
@@ -137,8 +214,9 @@ source, and Chinese/Korean robotics startups).
   listed company, or one founded more than 15 years ago, is an established
   company. When the question asks for a kind of organization, those are
   listed first and everything else appears as "Other organizations in the
-  ecosystem" (Renesas and Denso for Japanese robotics startups; SentinelOne,
-  Snyk and Netskope for European cybersecurity startups).
+  ecosystem" (Fanuc, Yaskawa Electric and Kawasaki Robotics for Japanese
+  robotics startups; SentinelOne, Snyk and Netskope for European
+  cybersecurity startups).
 - **Verification confidence** (high / medium / low) combines signals rather
   than relying on Wikidata: an official website (from the sources or
   Wikidata) or a name-matched one, coverage by reputable outlets, the number
@@ -151,9 +229,12 @@ source, and Chinese/Korean robotics startups).
 
 ## AI analysis and source attribution
 
-After sources are stored, the run makes **one** AI call over the story
-primaries (duplicates are not sent) and saves the result with the research.
-Opening a finished research never calls the AI again.
+By the time this step runs, sources have already passed AI relevance
+classification in batches (see Relevance filtering above) — this step is a
+single further AI call, over the filtered story primaries (direct and
+contextual, duplicates not sent), that turns them into the report. Its
+result is saved with the research; opening a finished research never calls
+the AI again.
 
 - **Input**: a compact, line-per-source list (title, publisher, date, domain,
   short snippet, "also reported by N outlets"), sources referred to as
@@ -244,6 +325,49 @@ each website came from.
 is never cached. Raw responses are cached rather than parsed results, so parser fixes
 apply to cached data immediately.
 
+## Reliability
+
+Mechanisms actually implemented, not aspirational ones:
+
+- A provider (search or AI) failing does not fail the whole research; the
+  run continues with whatever succeeded, and the run log explains what
+  failed and why.
+- AI analysis falls back from Gemini to Groq on any error, rate limit,
+  quota, timeout or output that fails validation.
+- AI relevance classification falls back to a deterministic keyword scorer
+  when the AI is unavailable or skips sources.
+- Database requests are timed out so a hung connection cannot stall a run.
+- Company resolution runs against a time budget; remaining website lookups
+  are skipped, not left hanging, once it is spent.
+- AI output is enforced by JSON schema and independently re-validated in
+  code: unknown source citations are dropped, items left without a real
+  citation are dropped, dates must be real and not in the future.
+- The final report and its resolved entities are saved together in one
+  Postgres transaction (`save_research_analysis`), which also re-checks that
+  every cited source belongs to the research and refuses to run twice.
+- Sources filtered out as irrelevant are never deleted: they are kept,
+  labelled, and shown in a collapsed group, so a run can be audited.
+
+## Limitations
+
+- AI relevance classification can vary between runs, since it depends on the
+  model's judgement, not fixed rules; the deterministic keyword scorer is a
+  fallback, not a substitute for it.
+- Country information can be missing for a company when the sources never
+  state it and it has no Wikidata entry — left blank rather than guessed,
+  including when a company's only evidence names more than one country (its
+  own site mentioning both a location and an unrelated proper noun that
+  happens to contain a demonym, for example) or none at all.
+- Name-matched websites (Clearbit, Tavily search) are weaker evidence than a
+  website that actually appears in the collected sources or on the matched
+  Wikidata item, and the UI labels them differently.
+- Search quality depends partly on the external providers: Tavily's index
+  and the seven news sites' own search feeds, neither controlled by this
+  app.
+- Free-tier model and provider limits (Gemini/Groq token-per-minute caps,
+  Tavily credits) can affect how many sources reach analysis and how much
+  detail their snippets carry.
+
 ## Tech stack
 
 - **Next.js 16** (App Router, TypeScript, Tailwind CSS 4), deployed on **Vercel**
@@ -330,16 +454,3 @@ npm run build
 | `AI_PROVIDERS` | no | Fallback order, default `gemini,groq` |
 | `RESEARCH_HOURLY_LIMIT` | no | Research runs allowed per rolling hour, app-wide. Default 20 |
 | `SUPABASE_DB_PASSWORD` | no | Used only by the Supabase CLI for `db push`; the app never reads it |
-
-## Roadmap
-
-1. ~~Application foundation~~
-2. ~~Research creation and persistence~~
-3. ~~Source discovery and ingestion~~
-4. ~~Normalization and deduplication~~
-5. ~~Entity resolution~~
-6. ~~Relevance filtering~~
-7. ~~AI analysis~~
-8. ~~Source-backed report generation~~
-9. Dashboard polish
-10. Deployment, testing and documentation
