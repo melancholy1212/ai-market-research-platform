@@ -10,6 +10,8 @@ sources that support it, and nothing in the app is mocked: research runs
 collect real sources, classify and analyze them with real AI providers, and
 resolve companies against real external data.
 
+![Research report: overview, key findings and companies split into startups and ecosystem context](docs/screenshots/report-overview.png)
+
 ## What this demonstrates
 
 - Multi-provider web research pipelines (Tavily web/news search, plus seven
@@ -92,6 +94,21 @@ McKinsey's analysis of Japan's robotics market) was kept as contextual. The
 GITAI) and established incumbents named for context (Fanuc, Yaskawa
 Electric, Kawasaki Robotics), each labelled and evidenced separately rather
 than presented the same way.
+
+## Screenshots
+
+Both from the run above.
+
+**Run log**, showing collection, deduplication, relevance filtering, AI
+analysis (including a live fallback: Gemini's flash model was rate-limited,
+so the run retried on flash-lite), and entity resolution:
+
+![Run log: search collection, relevance filtering counts, an AI provider fallback, and entity resolution stats](docs/screenshots/run-log.png)
+
+**Sources**, tabbed by Direct / Contextual / Filtered out, with each entry's
+publisher, date and snippet:
+
+![Sources tabbed by relevance, with citations](docs/screenshots/sources.png)
 
 ## How a research run works
 
