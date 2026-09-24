@@ -489,10 +489,15 @@ export async function runResearch(researchId: string): Promise<void> {
     );
     // Every story's title and snippet, so a company's country can be read off
     // its own cited evidence when neither the AI nor Wikidata gave one.
+    // Snippets are truncated the same way the analysis prompt truncates them
+    // (LIMITS.snippetChars): a source's full extracted text can run to
+    // thousands of characters and name countries with nothing to do with the
+    // specific company cited from it.
+    const clip = (s: string | null) => (s ? s.slice(0, LIMITS.snippetChars) : null);
     const storyText = new Map(
       analysisGroups.map(({ g }) => [
         primaryIds.get(g.primary.canonicalUrl)!,
-        [g.primary.title, g.primary.snippet, ...g.duplicates.flatMap((d) => [d.source.title, d.source.snippet])]
+        [g.primary.title, clip(g.primary.snippet), ...g.duplicates.flatMap((d) => [d.source.title, clip(d.source.snippet)])]
           .filter(Boolean)
           .join(" "),
       ]),
