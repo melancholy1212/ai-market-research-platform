@@ -18,6 +18,7 @@ export const RSS_SITES: readonly RssSite[] = [
   { id: "startup-daily", name: "Startup Daily", baseUrl: "https://www.startupdaily.net", coverage: "Australian startups" },
   { id: "techcabal", name: "TechCabal", baseUrl: "https://techcabal.com", coverage: "African tech" },
   { id: "securityweek", name: "SecurityWeek", baseUrl: "https://www.securityweek.com", coverage: "Cybersecurity" },
+  { id: "uktech-news", name: "UKTN", baseUrl: "https://www.uktech.news", coverage: "UK tech and startups" },
 ];
 
 export function searchFeedUrl(site: RssSite, keywords: string): string {
@@ -45,4 +46,5 @@ export const OUTLET_REGIONS: ReadonlyMap<string, string> = new Map([
   ["tech.eu", "europe"],
   ["sifted.eu", "europe"],
   ["yourstory.com", "india"],
+  ["uktech.news", "united kingdom"],
 ]);

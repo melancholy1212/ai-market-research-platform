@@ -46,12 +46,12 @@ log. The page refreshes itself while the run is active.
 | Provider | Used for | Notes |
 | --- | --- | --- |
 | Tavily | Web and news search | Needs `TAVILY_API_KEY`; 1 credit per search |
-| News site search | News from 6 curated outlets | Free, no key; WordPress search feeds (`/?s=<keywords>&feed=rss2`) |
+| News site search | News from 7 curated outlets | Free, no key; WordPress search feeds (`/?s=<keywords>&feed=rss2`) |
 
 The news-site search queries each outlet's WordPress search feed, which
 returns full-text search results as RSS, often reaching back months. The
 outlets (TechCrunch, Crunchbase News, Inc42, Startup Daily, TechCabal,
-SecurityWeek) were each checked by hand to return real,
+SecurityWeek, UKTN) were each checked by hand to return real,
 topic-filtered results. Individual outlets failing is reported as a warning
 in the run log; the search fails only if none can be read. GDELT was tried
 first and dropped: it rate-limits shared IPs (including Vercel's) and
